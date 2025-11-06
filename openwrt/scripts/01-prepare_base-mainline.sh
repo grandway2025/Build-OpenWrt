@@ -11,7 +11,7 @@ fi
 
 # rockchip - target - r4s/r5s only
 rm -rf target/linux/rockchip
-git clone https://$github/dd-ray/target_linux_rockchip-6.x target/linux/rockchip -b openwrt-24.10
+git clone https://$github/dd-ray/target_linux_rockchip-6.x target/linux/rockchip -b openwrt-23.05
 
 # x86_64 - target 6.6
 curl -s https://$mirror/openwrt/patch/openwrt-6.x/x86/64/config-6.6 > target/linux/x86/64/config-6.6
@@ -32,14 +32,15 @@ curl -s https://$mirror/openwrt/patch/openwrt-6.x/x86/base-files/etc/board.d/01_
 curl -s https://$mirror/openwrt/patch/openwrt-6.x/x86/base-files/etc/board.d/02_network > target/linux/x86/base-files/etc/board.d/02_network
 
 # bcm53xx - target
-rm -rf target/linux/bcm53xx
-git clone https://nanopi:nanopi@$gitea/sbwml/target_linux_bcm53xx target/linux/bcm53xx
-git clone https://nanopi:nanopi@$gitea/sbwml/brcmfmac-firmware-4366c-pcie package/firmware/brcmfmac-firmware-4366c-pcie
-git clone https://nanopi:nanopi@$gitea/sbwml/brcmfmac-firmware-4366b-pcie package/firmware/brcmfmac-firmware-4366b-pcie
+# rm -rf target/linux/bcm53xx
+# git clone https://nanopi:nanopi@$gitea/sbwml/target_linux_bcm53xx target/linux/bcm53xx
+# git clone https://nanopi:nanopi@$gitea/sbwml/brcmfmac-firmware-4366c-pcie package/firmware/brcmfmac-firmware-4366c-pcie
+# git clone https://nanopi:nanopi@$gitea/sbwml/brcmfmac-firmware-4366b-pcie package/firmware/brcmfmac-firmware-4366b-pcie
 
 # armsr/armv8
 rm -rf target/linux/armsr
-git clone https://nanopi:nanopi@$gitea/sbwml/target_linux_armsr target/linux/armsr
+# git clone https://nanopi:nanopi@$gitea/sbwml/target_linux_armsr target/linux/armsr
+git clone https://$github/dd-ray/target_linux_armsr target/linux/armsr -b main
 
 # kernel - 6.x
 curl -s https://$mirror/tags/kernel-6.6 > include/kernel-6.6
