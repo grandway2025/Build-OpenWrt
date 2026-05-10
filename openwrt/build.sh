@@ -191,8 +191,8 @@ if [ "$1" = "rc2" ]; then
     git clone https://$github/openwrt/routing master/routing --depth=1
 fi
 
-# openwrt-23.05
-[ "$1" = "rc2" ] && git clone https://$github/openwrt/openwrt -b openwrt-23.05 master/openwrt-23.05 --depth=1
+# openwrt-25.12
+[ "$1" = "rc2" ] && git clone https://$github/openwrt/openwrt -b openwrt-25.12 master/openwrt-25.12 --depth=1
 
 # immortalwrt master
 git clone https://$github/immortalwrt/packages master/immortalwrt_packages --depth=1
@@ -311,27 +311,26 @@ rm -rf ../master
 
 # Load devices Config
 if [ "$platform" = "x86_64" ]; then
-    curl -s https://$mirror/openwrt/23-config-musl-x86 > .config
-elif [ "$platform" = "bcm53xx" ]; then
-    if [ "$MINIMAL_BUILD" = "y" ]; then
-        curl -s https://$mirror/openwrt/23-config-musl-r8500-minimal > .config
-    else
-        curl -s https://$mirror/openwrt/23-config-musl-r8500 > .config
-    fi
+    curl -s $mirror/openwrt/25-config-musl-x86 > .config
 elif [ "$platform" = "rk3568" ]; then
-    curl -s https://$mirror/openwrt/23-config-musl-r5s > .config
+    curl -s $mirror/openwrt/25-config-musl-r5s > .config
+elif [ "$platform" = "rk3576" ]; then
+    curl -s $mirror/openwrt/25-config-musl-r76s > .config
 elif [ "$platform" = "armv8" ]; then
-    curl -s https://$mirror/openwrt/23-config-musl-armsr-armv8 > .config
+    curl -s $mirror/openwrt/25-config-musl-armsr-armv8 > .config
 else
-    curl -s https://$mirror/openwrt/23-config-musl-r4s > .config
+    curl -s $mirror/openwrt/25-config-musl-r4s > .config
 fi
 
 # config-common
 if [ "$MINIMAL_BUILD" = "y" ]; then
-    [ "$platform" != "bcm53xx" ] && curl -s https://$mirror/openwrt/23-config-minimal-common >> .config
+    curl -s $mirror/openwrt/25-config-minimal-common >> .config
     echo 'VERSION_TYPE="minimal"' >> package/base-files/files/usr/lib/os-release
+elif [ "$STD_BUILD" = "y" ]; then
+    curl -s $mirror/openwrt/25-config-std-common >> .config
+    echo 'VERSION_TYPE="standard"' >> package/base-files/files/usr/lib/os-release
 else
-    [ "$platform" != "bcm53xx" ] && curl -s https://$mirror/openwrt/23-config-common >> .config
+    curl -s $mirror/openwrt/25-config-common >> .config
     [ "$platform" = "armv8" ] && sed -i '/DOCKER/Id' .config
 fi
 
