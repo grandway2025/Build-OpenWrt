@@ -248,28 +248,31 @@ if [ -f ../dl.gz ]; then
     tar xf ../dl.gz -C .
 fi
 
-# 1. 基础更新
+# 1. 强制更新并完整安装所有 feeds
           ./scripts/feeds update -a
-          # 2. 【核心修复】禁用 x86 下导致报错且无用的 gpio-button-hotplug
-          # 这个包在 x86 上经常导致编译中断，直接从配置中剔除
-          sed -i 's/CONFIG_PACKAGE_kmod-gpio-button-hotplug=y/# CONFIG_PACKAGE_kmod-gpio-button-hotplug is not set/g' .config || true
-          
-          # 3. 【修复 OpenSSH】解决 libcrypt-compat 缺失警告
-          # 新版 OpenWrt 将 libcrypt 移出了工具链，需要手动开启兼容包
+          ./scripts/feeds install -a
+          # 2. 【修复 libcrypt-compat】解决 OpenSSH 等包的依赖 (非常关键，否则无法 SSH)
+          # 新版 OpenWrt 必须手动开启这个兼容层
+          sed -i 's/# CONFIG_PACKAGE_libcrypt-compat is not set/CONFIG_PACKAGE_libcrypt-compat=y/g' .config
           echo "CONFIG_PACKAGE_libcrypt=y" >> .config
           echo "CONFIG_PACKAGE_libcrypt-compat=y" >> .config
-          # 4. 【修复 HomeProxy】补齐缺失的 ucode 依赖
-          # 这是因为 feed 里的 ucode 版本或索引未对齐
-          ./scripts/feeds install ucode
-          ./scripts/feeds install luci-lib-ucode
-          
-          # 5. 修复之前提到的 python-pika 和依赖缺失（保留之前的逻辑）
-          [ -f feeds/packages/lang/python/python-pika/Makefile ] && sed -i 's/python-setuptools\/host//g' feeds/packages/lang/python/python-pika/Makefile
-          rm -rf feeds/packages/net/onionshare-cli
-          
-          # 6. 重新执行安装和配置刷新
-          ./scripts/feeds install -a
+          # 3. 【修复 boost-system】针对 i2pd, domoticz, libtorrent 等
+          # 新版 boost 已经去掉了 boost-system 独立包，直接由 boost 提供
+          # 我们通过修改 Makefile 强行删掉这个过时的依赖
+          find feeds/packages -name Makefile -exec sed -i 's/boost-system//g' {} +
+          # 4. 【修复 ucode-mod-digest】针对 HomeProxy
+          # 确保 ucode 及其模块被正确安装到包目录
+          ./scripts/feeds install -p luci luci-lib-ucode
+          ./scripts/feeds install -p packages ucode
+          # 5. 【解决内核模块警告】kmod-stmmac-core / kmod-gpio-button-hotplug
+          # 这些是硬件特定驱动，在 x86 上通常不需要且易报错，强行关闭
+          sed -i 's/CONFIG_PACKAGE_kmod-gpio-button-hotplug=y/# CONFIG_PACKAGE_kmod-gpio-button-hotplug is not set/g' .config
+          sed -i 's/CONFIG_PACKAGE_kmod-stmmac-core=y/# CONFIG_PACKAGE_kmod-stmmac-core is not set/g' .config
+          # 6. 【清理并刷新配置】
+          # 这一步非常重要：它会根据当前的源码树重新生成合法的配置，剔除不存在的包
           make defconfig
+          # 7. 再次确认关键包已安装
+          ./scripts/feeds install -a
           
 ###############################################
 echo -e "\n${GREEN_COLOR}Patching ...${RES}\n"
