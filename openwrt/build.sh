@@ -248,6 +248,29 @@ if [ -f ../dl.gz ]; then
     tar xf ../dl.gz -C .
 fi
 
+# 1. 基础更新
+          ./scripts/feeds update -a
+          # 2. 【核心修复】禁用 x86 下导致报错且无用的 gpio-button-hotplug
+          # 这个包在 x86 上经常导致编译中断，直接从配置中剔除
+          sed -i 's/CONFIG_PACKAGE_kmod-gpio-button-hotplug=y/# CONFIG_PACKAGE_kmod-gpio-button-hotplug is not set/g' .config || true
+          
+          # 3. 【修复 OpenSSH】解决 libcrypt-compat 缺失警告
+          # 新版 OpenWrt 将 libcrypt 移出了工具链，需要手动开启兼容包
+          echo "CONFIG_PACKAGE_libcrypt=y" >> .config
+          echo "CONFIG_PACKAGE_libcrypt-compat=y" >> .config
+          # 4. 【修复 HomeProxy】补齐缺失的 ucode 依赖
+          # 这是因为 feed 里的 ucode 版本或索引未对齐
+          ./scripts/feeds install ucode
+          ./scripts/feeds install luci-lib-ucode
+          
+          # 5. 修复之前提到的 python-pika 和依赖缺失（保留之前的逻辑）
+          [ -f feeds/packages/lang/python/python-pika/Makefile ] && sed -i 's/python-setuptools\/host//g' feeds/packages/lang/python/python-pika/Makefile
+          rm -rf feeds/packages/net/onionshare-cli
+          
+          # 6. 重新执行安装和配置刷新
+          ./scripts/feeds install -a
+          make defconfig
+          
 ###############################################
 echo -e "\n${GREEN_COLOR}Patching ...${RES}\n"
 
