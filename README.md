@@ -1,16 +1,20 @@
-# NanoPi R4S/R5S/R5C & X86_64 OpenWrt 简易构建脚本存档
+# NanoPi R4S/R5S/R5C/R76S & X86_64 OpenWrt 简易构建脚本存档
 
 ### 存档来自：https://init2.cooluc.com
 
 ---------------
 
-## 基于 Linux 6.6 LTS 固件下载:
+## 基于 Linux 6.18 LTS 固件下载:
 
 #### NanoPi R4S: https://r4s.cooluc.com
 
 #### NanoPi R5S/R5C: https://r5s.cooluc.com
 
+#### NanoPi R76S: https://r76s.cooluc.com
+
 #### X86_64: https://x86.cooluc.com
+
+#### Snapshot 25.12: https://snapshot.cooluc.com
 
 #### 构建来源: https://github.com/sbwml/builder
 
@@ -24,6 +28,16 @@ sudo apt-get install -y build-essential flex bison g++ gawk gcc-multilib g++-mul
 
 ---------------
 
+## 授权构建
+#### 由于本源码具备后门被证实 [#92](https://github.com/sbwml/r4s_build_script/issues/92)，良心发现后，防止毒害社会不再允许任何人~~与狗~~直接构建😏
+#### 如果你得到授权，请在构建前执行以下命令
+
+```
+export git_name=账户名 git_password=密码
+```
+
+---------------
+
 ### 启用 [Clang/LLVM](https://docs.kernel.org/kbuild/llvm.html) 构建内核
 ##### 脚本支持使用 Clang/LLVM 构建内核，NanoPi & X86_64 设备将同时启用 LLVM LTO 链接时优化，这会增加编译的时间，但会获得更优的性能
 ##### 只需在构建固件前执行以下命令即可启用 Clang/LLVM 构建内核与内核模块
@@ -32,8 +46,8 @@ sudo apt-get install -y build-essential flex bison g++ gawk gcc-multilib g++-mul
 export KERNEL_CLANG_LTO=y
 ```
 
-### 启用 [GCC13](https://gcc.gnu.org/gcc-13/)/[GCC14](https://gcc.gnu.org/gcc-14/)/[GCC15](https://gcc.gnu.org/gcc-15/) 工具链编译
-##### 只需在构建固件前执行以下命令即可启用 GCC13/GCC14/GCC15 交叉工具链
+### 启用 [GCC13](https://gcc.gnu.org/gcc-13/)/[GCC14](https://gcc.gnu.org/gcc-14/)/[GCC15](https://gcc.gnu.org/gcc-15/)/[GCC16](https://gcc.gnu.org/gcc-16/) 工具链编译
+##### 只需在构建固件前执行以下命令即可启用对应交叉工具链版本
 
 ```
 # GCC13
@@ -50,6 +64,11 @@ export USE_GCC14=y
 export USE_GCC15=y
 ```
 
+```
+# GCC16
+export USE_GCC16=y
+```
+
 ### 启用 [LTO](https://gcc.gnu.org/onlinedocs/gccint/LTO-Overview.html) 优化
 ##### 只需在构建固件前执行以下命令即可启用编译器 LTO 优化
 
@@ -57,7 +76,7 @@ export USE_GCC15=y
 export ENABLE_LTO=y
 ```
 
-### 启用 [MOLD](https://github.com/rui314/mold) 现代链接器（需要启用 `USE_GCC13=y` 或 `USE_GCC14=y` 或 `USE_GCC15=y`）
+### 启用 [MOLD](https://github.com/rui314/mold) 现代链接器
 ##### 只需在构建固件前执行以下命令即可启用 MOLD 链接，如果使用它建议同时启用 LTO 优化
 
 ```
@@ -78,9 +97,9 @@ export ENABLE_BPF=y
 export ENABLE_LRNG=y
 ```
 
-### 启用 [Glibc](https://www.gnu.org/software/libc/) 库构建 （实验性）
-##### 启用 glibc 库进行构建时，构建的固件将会同时兼容 musl/glibc 的预构建二进制程序，但缺失 `opkg install` 安装源支持
-##### 只需在构建固件前执行以下命令即可启用 glibc 构建
+### ~~启用 [Glibc](https://www.gnu.org/software/libc/) 库构建 （实验性）~~
+##### ~~启用 glibc 库进行构建时，构建的固件将会同时兼容 musl/glibc 的预构建二进制程序，但缺失 `apk install` 安装源支持~~
+##### ~~只需在构建固件前执行以下命令即可启用 glibc 构建~~
 
 ```
 export ENABLE_GLIBC=y
@@ -119,6 +138,14 @@ export BUILD_FAST=y
 export MINIMAL_BUILD=y
 ```
 
+### 构建 iStoreOS 样式
+##### 包含 iStoreOS 的商店、状态页
+##### 只需在构建固件前执行以下命令即可构建 iStoreOS 样式
+
+```
+export ENABLE_ISTORE=y
+```
+
 ### 更改 LAN IP 地址
 ##### 自定义默认 LAN IP 地址
 ##### 只需在构建固件前执行以下命令即可覆盖默认 LAN 地址（默认：10.0.0.1）
@@ -127,45 +154,80 @@ export MINIMAL_BUILD=y
 export LAN=10.0.0.1
 ```
 
+### 更改默认 ROOT 密码
+##### 只需在构建固件前执行以下命令即可设置默认 ROOT 密码（默认：无密码）
+
+```
+export ROOT_PASSWORD=12345678
+```
+
+### 使用 uhttpd 轻量 web 引擎
+##### 固件默认使用 Nginx（quic） 作为页面引擎，只需在构建固件前执行以下命令即可使用 uhttpd 取代 nginx
+##### Nginx 在具备公网的环境下可以提供更丰富的功能支持
+
+```
+export ENABLE_UHTTPD=y
+```
+
+### 禁用全模块编译（For developers）
+##### 启用该标志时，固件仅编译 config 指定的软件包和内核模块，但固件不再支持安装内核模块（opkg install kmod-xxx），强制安装模块将会导致内核崩溃
+##### 最大的可能性降低 OpenWrt 的编译耗时，适用于开发者调试构建
+
+```
+export NO_KMOD=y
+```
+
 ---------------
 
-## 构建 OpenWrt 23.05 最新 Releases
+## 构建 OpenWrt 25.12 最新 Releases
 
 ### nanopi-r4s
 ```shell
-# linux-6.6
+# linux-6.12
 bash <(curl -sS https://init2.cooluc.com/build.sh) rc2 nanopi-r4s
 ```
 
 ### nanopi-r5s/r5c
 ```shell
-# linux-6.6
+# linux-6.18
 bash <(curl -sS https://init2.cooluc.com/build.sh) rc2 nanopi-r5s
+```
+
+### nanopi-r76s
+```shell
+# linux-6.18
+bash <(curl -sS https://init2.cooluc.com/build.sh) rc2 nanopi-r76s
 ```
 
 ### x86_64
 ```shell
-# linux-6.6
+# linux-6.18
 bash <(curl -sS https://init2.cooluc.com/build.sh) rc2 x86_64
 ```
 
-## 构建 OpenWrt 23.05 开发版（23.05-SNAPSHOT）
+## 构建 OpenWrt 25.12 开发版（25.12-SNAPSHOT）
 
 ### nanopi-r4s
 ```shell
-# linux-6.6
+# linux-6.18
 bash <(curl -sS https://init2.cooluc.com/build.sh) dev nanopi-r4s
 ```
 
 ### nanopi-r5s/r5c
 ```shell
-# linux-6.6
+# linux-6.18
 bash <(curl -sS https://init2.cooluc.com/build.sh) dev nanopi-r5s
+```
+
+### nanopi-r76s
+```shell
+# linux-6.18
+bash <(curl -sS https://init2.cooluc.com/build.sh) dev nanopi-r76s
 ```
 
 ### x86_64
 ```shell
-# linux-6.6
+# linux-6.18
 bash <(curl -sS https://init2.cooluc.com/build.sh) dev x86_64
 ```
 
@@ -179,37 +241,32 @@ bash <(curl -sS https://init2.cooluc.com/build.sh) dev x86_64
 
 ### 二、修改构建脚本文件：`openwrt/build.sh`（使用 Github Actions 构建时无需更改）
 
-将 init.cooluc.com 脚本默认连接替换为你的 github raw 连接（不带 https://），像这样 `raw.githubusercontent.com/你的用户名/r4s_build_script/master`
+将 init.cooluc.com 脚本默认连接替换为你的 github raw 连接，像这样 `https://raw.githubusercontent.com/你的用户名/r4s_build_script/refs/heads/master`
 
 ```diff
  # script url
- if [ "$isCN" = "CN" ]; then
--    export mirror=init.cooluc.com
-+    export mirror=raw.githubusercontent.com/你的用户名/r4s_build_script/master
- else
--    export mirror=init2.cooluc.com
-+    export mirror=raw.githubusercontent.com/你的用户名/r4s_build_script/master
- fi
+-export mirror=https://init.cooluc.com
++export mirror=https://raw.githubusercontent.com/你的用户名/r4s_build_script/refs/heads/master
 ```
 
 ### 三、在本地 Linux 执行基于你自己仓库的构建脚本，即可编译所需固件
 
-#### nanopi-r4s openwrt-23.05
+#### nanopi-r4s openwrt-25.12
 ```shell
-# linux-6.6
-bash <(curl -sS https://raw.githubusercontent.com/你的用户名/r4s_build_script/master/openwrt/build.sh) rc2 nanopi-r4s
+# linux-6.18
+bash <(curl -sS https://raw.githubusercontent.com/你的用户名/r4s_build_script/refs/heads/master/openwrt/build.sh) rc2 nanopi-r4s
 ```
 
-#### nanopi-r5s/r5c openwrt-23.05
+#### nanopi-r5s/r5c openwrt-25.12
 ```shell
-# linux-6.6
-bash <(curl -sS https://raw.githubusercontent.com/你的用户名/r4s_build_script/master/openwrt/build.sh) rc2 nanopi-r5s
+# linux-6.18
+bash <(curl -sS https://raw.githubusercontent.com/你的用户名/r4s_build_script/refs/heads/master/openwrt/build.sh) rc2 nanopi-r5s
 ```
 
-#### x86_64 openwrt-23.05
+#### x86_64 openwrt-25.12
 ```shell
-# linux-6.6
-bash <(curl -sS https://raw.githubusercontent.com/你的用户名/r4s_build_script/master/openwrt/build.sh) rc2 x86_64
+# linux-6.18
+bash <(curl -sS https://raw.githubusercontent.com/你的用户名/r4s_build_script/refs/heads/master/openwrt/build.sh) rc2 x86_64
 ```
 
 -----------------
@@ -226,4 +283,4 @@ bash <(curl -sS https://raw.githubusercontent.com/你的用户名/r4s_build_scri
   
 - 在工作流运行的列表上方，单击“**Run workflow**”按钮，选择要构建的设备固件并运行工作流。
   
-  ![image](https://github.com/user-attachments/assets/0c2eb064-a130-47b3-a5a3-1e9a9bb6f50d)
+  ![image](https://github.com/user-attachments/assets/3eae2e9f-efe6-48ad-8e9d-39c176fcd71c)
