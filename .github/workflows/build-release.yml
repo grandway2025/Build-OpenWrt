@@ -108,7 +108,7 @@ jobs:
         key: openwrt-25.12-${{ github.event.inputs.device }}-ccache
 
     - name: Restore Cached (releases)
-      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
+      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
       continue-on-error: true
       working-directory: /builder
       run: |
@@ -126,8 +126,8 @@ jobs:
       id: compile
       continue-on-error: true
       env:
-        git_name: ${{ secrets.username }}
-        git_password: ${{ secrets.password }}
+        git_name: grandway2025
+        git_password: ${{ secrets.CLONE_TOKEN }}
       run: |
         export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_GCC15=y
         [ ${{ github.event.inputs.ccache }} = 'true' ] && export ENABLE_CCACHE=y
@@ -167,7 +167,7 @@ jobs:
         key: openwrt-25.12-${{ github.event.inputs.device }}-ccache
 
     - name: Create ccache tar files
-      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
+      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
       continue-on-error: true
       working-directory: /builder
       run: |
@@ -175,7 +175,7 @@ jobs:
         tar cf - .ccache | split -d -b 1800m - ccache/${{ github.event.inputs.device }}.tar.
 
     - name: Upload Cached (releases - ccache)
-      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
+      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
       continue-on-error: true
       uses: ncipollo/release-action@main
       with:
