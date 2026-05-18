@@ -124,7 +124,6 @@ jobs:
     - name: Compile OpenWrt
       working-directory: /builder
       id: compile
-      continue-on-error: true
       env:
         git_name: grandway2025
         git_password: ${{ secrets.CLONE_TOKEN }}
