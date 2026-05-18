@@ -406,6 +406,8 @@ if [ "$ENABLE_CCACHE" = "y" ]; then
     [ "$(whoami)" = "runner" ] && echo "CONFIG_CCACHE_DIR=\"/builder/.ccache\"" >> .config
     [ "$(whoami)" = "sbwml" ] && echo "CONFIG_CCACHE_DIR=\"/home/sbwml/.ccache\"" >> .config
     tools_suffix="_ccache"
+else
+    tools_suffix=""
 fi
 
 # nanopi-r76s
