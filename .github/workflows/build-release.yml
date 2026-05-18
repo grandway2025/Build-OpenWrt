@@ -46,6 +46,9 @@ jobs:
   build:
     name: Build ${{ github.event.inputs.device }}
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write       # 创建/更新 release 必需
+      actions: write        # 删除 actions cache 必需（gh cache delete）
     defaults:
       run:
         shell: bash
