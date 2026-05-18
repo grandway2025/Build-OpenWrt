@@ -184,7 +184,7 @@ jobs:
         name: ccache
         allowUpdates: true
         tag: ccache
-        commit: master
+        commit: ${{ github.ref_name }}
         replacesArtifacts: true
         prerelease: true
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -232,7 +232,7 @@ jobs:
         name: ${{ env.latest_release }}
         allowUpdates: true
         tag: ${{ env.latest_release }}
-        commit: master
+        commit: ${{ github.ref_name }}
         replacesArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.build_dir }}/rom/*
