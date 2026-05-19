@@ -421,8 +421,10 @@ fi
 
 # Toolchain Cache
 if [ "$BUILD_FAST" = "y" ]; then
-    [ "$ENABLE_GLIBC" = "y" ] && LIBC=glibc || LIBC=musl
-    [ "$isCN" = "CN" ] && github_proxy="ghp.ci/" || github_proxy=""
+    echo "===== TOOLCHAIN CACHE BLOCK ENTERED ====="
+    echo "TOOLCHAIN_URL=${TOOLCHAIN_URL}"
+    echo "LIBC=${LIBC} arch=${toolchain_arch} gcc=${gcc_version} suffix=${tools_suffix}"
+    echo "Final URL: ${TOOLCHAIN_URL}/toolchain_${LIBC}_${toolchain_arch}_gcc-${gcc_version}${tools_suffix}.tar.zst"
     echo -e "\n${GREEN_COLOR}Download Toolchain ...${RES}"
     PLATFORM_ID=""
     [ -f /etc/os-release ] && source /etc/os-release
