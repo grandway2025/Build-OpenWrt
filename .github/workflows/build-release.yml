@@ -135,19 +135,6 @@ jobs:
         export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_GCC15=y BUILD_FAST=y ENABLE_CCACHE=y
         [ ${{ github.event.inputs.ccache }} = 'true' ] && export ENABLE_CCACHE=y
         [ -n ${{ github.event.inputs.root_password }} ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
-        # ===== Toolchain 预编译缓存（命中后跳过 toolchain 编译，节省 ~30 分钟）=====
-        export TOOLCHAIN_URL="https://github.com/grandway2025/Toolchain-Cache/releases/download/openwrt-25.12"
-        export LIBC=musl
-        export ENABLE_CCACHE=y   # 与 release 里的 *_ccache.tar.zst 文件名后缀对齐
-        # =====================================================================
-        echo "===== ENV CHECK ====="
-        echo "BUILD_FAST=$BUILD_FAST"
-        echo "ENABLE_CCACHE=$ENABLE_CCACHE"
-        echo "USE_GCC15=$USE_GCC15"
-        echo "TOOLCHAIN_URL=$TOOLCHAIN_URL"
-        env | grep -E '^(BUILD_FAST|ENABLE_|USE_|TOOLCHAIN)' | sort
-        echo "====================="
-        # =================
         bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ env.build_version }} ${{ github.event.inputs.device }}
         cd openwrt
         if [ "${{ github.event.inputs.version }}" = release ]; then
