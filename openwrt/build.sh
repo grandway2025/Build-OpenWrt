@@ -40,7 +40,12 @@ export mirror=https://init.cooluc.com
 
 # github actions - caddy server
 if [ "$(whoami)" = "runner" ] && [ "$git_name" != "private" ]; then
-    export mirror=http://127.0.0.1:8080
+    if curl -sf --max-time 3 http://127.0.0.1:8080/ >/dev/null 2>&1; then
+        export mirror=http://127.0.0.1:8080
+    else
+        echo -e "${YELLOW_COLOR}Local caddy proxy not available, using public mirror${RES}"
+        export mirror=https://init.cooluc.com
+    fi
 fi
 
 # private gitea
@@ -280,7 +285,11 @@ scripts=(
   99_clean_build_cache.sh
 )
 for script in "${scripts[@]}"; do
-  curl -sO "$mirror/openwrt/scripts/$script"
+  echo "  Downloading $script ..."
+  curl -fsSL --retry 3 --retry-delay 2 -o "$script" "$mirror/openwrt/scripts/$script" || {
+    echo -e "${RED_COLOR}ERROR: Failed to download $script from $mirror${RES}"
+    exit 1
+  }
 done
 if [ -n "$git_password" ] && [ -n "$private_url" ]; then
     curl -u openwrt:$git_password -sO "$private_url"
