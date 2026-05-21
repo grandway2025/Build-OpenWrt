@@ -46,9 +46,6 @@ jobs:
   build:
     name: Build ${{ github.event.inputs.device }}
     runs-on: ubuntu-24.04
-    permissions:
-      contents: write       # 创建/更新 release 必需
-      actions: write        # 删除 actions cache 必需（gh cache delete）
     defaults:
       run:
         shell: bash
@@ -111,7 +108,7 @@ jobs:
         key: openwrt-25.12-${{ github.event.inputs.device }}-ccache
 
     - name: Restore Cached (releases)
-      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
+      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
       continue-on-error: true
       working-directory: /builder
       run: |
@@ -129,10 +126,10 @@ jobs:
       id: compile
       continue-on-error: true
       env:
-        git_name: grandway2025
-        git_password: ${{ secrets.CLONE_TOKEN }}
+        git_name: ${{ secrets.username }}
+        git_password: ${{ secrets.password }}
       run: |
-        export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_GCC15=y BUILD_FAST=y ENABLE_CCACHE=y
+        export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_GCC15=y
         [ ${{ github.event.inputs.ccache }} = 'true' ] && export ENABLE_CCACHE=y
         [ -n ${{ github.event.inputs.root_password }} ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
         bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ env.build_version }} ${{ github.event.inputs.device }}
@@ -170,7 +167,7 @@ jobs:
         key: openwrt-25.12-${{ github.event.inputs.device }}-ccache
 
     - name: Create ccache tar files
-      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
+      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
       continue-on-error: true
       working-directory: /builder
       run: |
@@ -178,14 +175,14 @@ jobs:
         tar cf - .ccache | split -d -b 1800m - ccache/${{ github.event.inputs.device }}.tar.
 
     - name: Upload Cached (releases - ccache)
-      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
+      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
       continue-on-error: true
       uses: ncipollo/release-action@main
       with:
         name: ccache
         allowUpdates: true
         tag: ccache
-        commit: ${{ github.ref_name }}
+        commit: master
         replacesArtifacts: true
         prerelease: true
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -233,7 +230,7 @@ jobs:
         name: ${{ env.latest_release }}
         allowUpdates: true
         tag: ${{ env.latest_release }}
-        commit: ${{ github.ref_name }}
+        commit: master
         replacesArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.build_dir }}/rom/*
