@@ -40,12 +40,7 @@ export mirror=https://init.cooluc.com
 
 # github actions - caddy server
 if [ "$(whoami)" = "runner" ] && [ "$git_name" != "private" ]; then
-    if curl -sf --max-time 3 http://127.0.0.1:8080/ >/dev/null 2>&1; then
-        export mirror=http://127.0.0.1:8080
-    else
-        echo -e "${YELLOW_COLOR}Local caddy proxy not available, using public mirror${RES}"
-        export mirror=https://init.cooluc.com
-    fi
+    export mirror=http://127.0.0.1:8080
 fi
 
 # private gitea
@@ -285,11 +280,7 @@ scripts=(
   99_clean_build_cache.sh
 )
 for script in "${scripts[@]}"; do
-  echo "  Downloading $script ..."
-  curl -fsSL --retry 3 --retry-delay 2 -o "$script" "$mirror/openwrt/scripts/$script" || {
-    echo -e "${RED_COLOR}ERROR: Failed to download $script from $mirror${RES}"
-    exit 1
-  }
+  curl -sO "$mirror/openwrt/scripts/$script"
 done
 if [ -n "$git_password" ] && [ -n "$private_url" ]; then
     curl -u openwrt:$git_password -sO "$private_url"
@@ -415,8 +406,6 @@ if [ "$ENABLE_CCACHE" = "y" ]; then
     [ "$(whoami)" = "runner" ] && echo "CONFIG_CCACHE_DIR=\"/builder/.ccache\"" >> .config
     [ "$(whoami)" = "sbwml" ] && echo "CONFIG_CCACHE_DIR=\"/home/sbwml/.ccache\"" >> .config
     tools_suffix="_ccache"
-else
-    tools_suffix=""
 fi
 
 # nanopi-r76s
@@ -438,7 +427,7 @@ if [ "$BUILD_FAST" = "y" ]; then
     if [ "$PLATFORM_ID" = "platform:el9" ]; then
         TOOLCHAIN_URL="http://127.0.0.1:8080"
     else
-        TOOLCHAIN_URL=https://"$github_proxy"github.com/grandway2025/Toolchain-Cache/releases/download/openwrt-25.12
+        TOOLCHAIN_URL=https://"$github_proxy"github.com/sbwml/openwrt_caches/releases/download/openwrt-25.12
     fi
     curl -L ${TOOLCHAIN_URL}/toolchain_${LIBC}_${toolchain_arch}_gcc-${gcc_version}${tools_suffix}.tar.zst -o toolchain.tar.zst $CURL_BAR
     echo -e "\n${GREEN_COLOR}Process Toolchain ...${RES}"
