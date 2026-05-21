@@ -126,8 +126,8 @@ jobs:
       id: compile
       continue-on-error: true
       env:
-        git_name: ${{ secrets.username }}
-        git_password: ${{ secrets.password }}
+        git_name: grandway2025
+        git_password: ${{ secrets.CLONE_TOKEN }}
       run: |
         export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_GCC15=y
         [ ${{ github.event.inputs.ccache }} = 'true' ] && export ENABLE_CCACHE=y
@@ -230,7 +230,7 @@ jobs:
         name: ${{ env.latest_release }}
         allowUpdates: true
         tag: ${{ env.latest_release }}
-        commit: master
+        commit: ${{ github.ref_name }}
         replacesArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.build_dir }}/rom/*
