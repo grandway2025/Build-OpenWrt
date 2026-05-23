@@ -427,15 +427,11 @@ if [ "$BUILD_FAST" = "y" ]; then
     if [ "$PLATFORM_ID" = "platform:el9" ]; then
         TOOLCHAIN_URL="http://127.0.0.1:8080"
     else
-        TOOLCHAIN_URL=https://"$github_proxy"github.com/grandway2025/Toolchain-Cache/releases/download/openwrt-25.12
+        TOOLCHAIN_URL=https://"$github_proxy"github.com/sbwml/openwrt_caches/releases/download/openwrt-25.12
     fi
-    TOOLCHAIN_FILE="toolchain_${LIBC}_${toolchain_arch}_gcc-${gcc_version}${tools_suffix}.tar.zst"
-    TOOLCHAIN_FULL_URL="${TOOLCHAIN_URL}/${TOOLCHAIN_FILE}"
-    echo -e "\n${GREEN_COLOR}Toolchain URL:${RES} ${TOOLCHAIN_FULL_URL}"
-    curl -fL "${TOOLCHAIN_FULL_URL}" -o toolchain.tar.zst $CURL_BAR
+    curl -L ${TOOLCHAIN_URL}/toolchain_${LIBC}_${toolchain_arch}_gcc-${gcc_version}${tools_suffix}.tar.zst -o toolchain.tar.zst $CURL_BAR
     echo -e "\n${GREEN_COLOR}Downloaded toolchain:${RES}"
     ls -lh toolchain.tar.zst
-    file toolchain.tar.zst
     echo -e "\n${GREEN_COLOR}Process Toolchain ...${RES}"
     tar -I "zstd" -xf toolchain.tar.zst
     rm -f toolchain.tar.zst
@@ -465,10 +461,7 @@ else
     echo -e "\r\n${GREEN_COLOR}Building OpenWrt ...${RES}\r\n"
     sed -i "/BUILD_DATE/d" package/base-files/files/usr/lib/os-release
     sed -i "/BUILD_ID/aBUILD_DATE=\"$CURRENT_DATE\"" package/base-files/files/usr/lib/os-release
-    make -j$cores IGNORE_ERRORS="n m" || {
-        echo -e "\n${RED_COLOR}Parallel build failed, retry with -j1 V=s ...${RES}\n"
-        make -j1 V=s IGNORE_ERRORS="n m"
-    }
+    make -j$cores IGNORE_ERRORS="n m"
 fi
 
 # Compile time
