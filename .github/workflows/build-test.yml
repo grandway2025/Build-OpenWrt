@@ -82,17 +82,23 @@ jobs:
 
     - name: Install Caddy Server
       run: |
-        sudo curl -sL -o /usr/bin/caddy https://github.com/sbwml/r4s_build_script/releases/download/caddy/caddy
+        sudo curl -fsSL -o /usr/bin/caddy https://github.com/sbwml/r4s_build_script/releases/download/caddy/caddy
         sudo chmod 755 /usr/bin/caddy
-        echo ":8080 {" > caddyfile
-        echo "    root * $(pwd)/r4s_build_script" >> caddyfile
-        echo "    file_server browse" >> caddyfile
-        echo "}" >> caddyfile
+        cat > caddyfile <<EOF
+        :8080 {
+            root * $(pwd)/r4s_build_script
+            file_server browse
+        }
+        EOF
         sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
         echo "Check local mirror..."
-        curl -fsSL http://127.0.0.1:8080/build.sh | head -5
-        curl -fsSL http://127.0.0.1:8080/tags/v25
-        curl -fsSL http://127.0.0.1:8080/openwrt/25-config-musl-x86 | head -5
+        curl -fsSL http://127.0.0.1:8080/build.sh -o /tmp/build.sh
+        head -5 /tmp/build.sh
+        curl -fsSL http://127.0.0.1:8080/tags/v25 -o /tmp/v25
+        cat /tmp/v25
+        curl -fsSL http://127.0.0.1:8080/openwrt/25-config-musl-x86 -o /tmp/25-config-musl-x86
+        head -5 /tmp/25-config-musl-x86
+        echo "Local mirror check OK"
 
     - name: Free disk space
       uses: sbwml/actions@free-disk
