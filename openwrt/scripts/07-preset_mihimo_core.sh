@@ -1,40 +1,39 @@
 #!/bin/bash
+set -euo pipefail
 
-# 创建 OpenClash 核心目录（若不存在则自动创建）
+# 工作目录应为 openwrt/
 mkdir -p files/etc/openclash/core
 
-# 根据平台设置 core 架构
-if [ "$platform" = "rockchip" ]; then
-    core="arm64"
-elif [ "$platform" = "x86_64" ]; then
-    core="amd64"
-fi
-
-# 根据 mihomo_core 类型选择下载链接
-case "$mihomo_core" in
-    "meta")
-        CLASH_META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-$core.tar.gz"
-        ;;
-    "smart")
-        CLASH_META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/smart/clash-linux-$core.tar.gz"
-        ;;
+# 平台 → 架构映射
+case "$platform" in
+    rk3399|rk3568|rk3576|armv8)
+        core="arm64" ;;
+    x86_64)
+        core="amd64" ;;
     *)
-        CLASH_META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/meta/clash-linux-$core.tar.gz"
-        ;;
+        echo "Skip mihomo preset: unsupported platform=$platform"
+        exit 0 ;;
 esac
 
-# 定义 geoip.dat、geosite.dat下载链接
+# 内核类型，默认 meta
+mihomo_core="${mihomo_core:-meta}"
+case "$mihomo_core" in
+    smart) SUBDIR="smart" ;;
+    meta|*) SUBDIR="meta" ;;
+esac
+
+CLASH_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/${SUBDIR}/clash-linux-${core}.tar.gz"
 GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
 GEOSITE_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
 
-# 下载并解压 Clash Meta 内核，输出为 clash_meta 可执行文件
-wget -qO- $CLASH_META_URL | tar xOvz > files/etc/openclash/core/clash_meta
+echo "Downloading mihomo core: $CLASH_URL"
+wget -qO- "$CLASH_URL" | tar -xOz > files/etc/openclash/core/clash_meta
+[ -s files/etc/openclash/core/clash_meta ] || { echo "clash_meta download failed"; exit 1; }
 
-# 下载 GeoIP 数据库（IP 地址归属地信息）
-wget -qO- $GEOIP_URL > files/etc/openclash/GeoIP.dat
+wget -qO files/etc/openclash/GeoIP.dat   "$GEOIP_URL"
+wget -qO files/etc/openclash/GeoSite.dat "$GEOSITE_URL"
+[ -s files/etc/openclash/GeoIP.dat ]   || { echo "GeoIP download failed"; exit 1; }
+[ -s files/etc/openclash/GeoSite.dat ] || { echo "GeoSite download failed"; exit 1; }
 
-# 下载 GeoSite 数据库（常用域名分类信息）
-wget -qO- $GEOSITE_URL > files/etc/openclash/GeoSite.dat
-
-# 赋予 Clash 核心文件可执行权限
-chmod +x files/etc/openclash/core/clash*
+chmod +x files/etc/openclash/core/clash_meta
+echo "mihomo core preset done."
