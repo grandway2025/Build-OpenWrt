@@ -27,7 +27,12 @@ GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/downl
 GEOSITE_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
 
 echo "Downloading mihomo core: $CLASH_URL"
-wget -qO- "$CLASH_URL" | tar -xOz > files/etc/openclash/core/clash_meta
+# 解压到临时目录后再移动，避免 stdout 拼接问题
+TMPDIR=$(mktemp -d)
+wget -qO- "$CLASH_URL" | tar -xz -C "$TMPDIR"
+BIN=$(find "$TMPDIR" -type f | head -n1)
+[ -n "$BIN" ] && mv "$BIN" files/etc/openclash/core/clash_meta
+rm -rf "$TMPDIR"
 [ -s files/etc/openclash/core/clash_meta ] || { echo "clash_meta download failed"; exit 1; }
 
 wget -qO files/etc/openclash/GeoIP.dat   "$GEOIP_URL"
