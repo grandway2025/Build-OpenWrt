@@ -99,6 +99,9 @@ fi
 # lan
 [ -n "$LAN" ] && export LAN=$LAN || export LAN=10.0.0.1
 
+# mihomo_core
+export mihomo_core="${{ github.event.inputs.mihomo_core }}"
+
 # platform
 case "$2" in
     armv8)
