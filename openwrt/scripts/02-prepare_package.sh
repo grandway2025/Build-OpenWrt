@@ -186,3 +186,6 @@ git clone https://$github/sbwml/package_libs_libpcap package/libs/libpcap
 
 # sqm-scripts
 curl -s $mirror/openwrt/patch/sqm-scripts/Makefile > feeds/packages/net/sqm-scripts/Makefile
+
+# luci-app-adguardhome
+git clone https://$github/grandway2025/luci-app-adguardhome package/new/luci-app-adguardhome --depth=1
