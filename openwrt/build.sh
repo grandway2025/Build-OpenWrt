@@ -99,8 +99,8 @@ fi
 # lan
 [ -n "$LAN" ] && export LAN=$LAN || export LAN=10.0.0.1
 
-# mihomo_core
-export mihomo_core="${{ github.event.inputs.mihomo_core }}"
+# mihomo_core (从环境变量读取，默认 meta)
+export mihomo_core="${mihomo_core:-meta}"
 
 # platform
 case "$2" in
