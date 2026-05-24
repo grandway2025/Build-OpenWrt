@@ -277,6 +277,8 @@ scripts=(
   03-convert_translation.sh
   04-fix_kmod.sh
   05-fix-source.sh
+  05-prepare_adguard_core.sh
+  07-preset_mihimo_core.sh
   99_clean_build_cache.sh
 )
 for script in "${scripts[@]}"; do
