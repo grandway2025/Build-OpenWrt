@@ -41,6 +41,10 @@ export mirror=https://init.cooluc.com
 # github actions - caddy server
 if [ "$(whoami)" = "runner" ] && [ "$git_name" != "private" ]; then
     export mirror=http://127.0.0.1:8080
+    else
+        echo -e "${YELLOW_COLOR}Local caddy proxy not available, using public mirror${RES}"
+        export mirror=https://init.cooluc.com
+    fi
 fi
 
 # private gitea
@@ -97,7 +101,7 @@ elif [ "$1" = "rc2" ]; then
 fi
 
 # lan
-[ -n "$LAN" ] && export LAN=$LAN || export LAN=10.0.0.1
+[ -n "$LAN" ] && export LAN=$LAN || export LAN=192.168.1.10
 
 # mihomo_core (从环境变量读取，默认 meta)
 export mihomo_core="${mihomo_core:-meta}"
