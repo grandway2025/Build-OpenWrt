@@ -40,12 +40,7 @@ export mirror=https://init.cooluc.com
 
 # github actions - caddy server
 if [ "$(whoami)" = "runner" ] && [ "$git_name" != "private" ]; then
-    if curl -sf --max-time 3 http://127.0.0.1:8080/ >/dev/null 2>&1; then
-        export mirror=http://127.0.0.1:8080
-    else
-        echo -e "${YELLOW_COLOR}Local caddy proxy not available, using public mirror${RES}"
-        export mirror=https://init.cooluc.com
-    fi
+    export mirror=http://127.0.0.1:8080
 fi
 
 # private gitea
