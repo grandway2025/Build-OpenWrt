@@ -133,6 +133,7 @@ jobs:
       env:
         git_name: grandway2025
         git_password: ${{ secrets.CLONE_TOKEN }}
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
       run: |
         export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_GCC15=y
         export mihomo_core="${{ github.event.inputs.mihomo_core }}"
