@@ -66,7 +66,7 @@ starttime=`date +'%Y-%m-%d %H:%M:%S'`
 CURRENT_DATE=$(date +%s)
 
 # Cpus
-cores=`expr $(nproc) + 1`
+cores=`expr $(nproc --all) + 1`
 
 # $CURL_BAR
 if curl --help | grep progress-bar >/dev/null 2>&1; then
@@ -194,7 +194,7 @@ print_status() {
         echo -e "${GREEN_COLOR}${name}:${RES} ${false_color}false${RES}${newline}"
     fi
 }
-[ -n "$LAN" ] && echo -e "${GREEN_COLOR}LAN:${RES} $LAN" || echo -e "${GREEN_COLOR}LAN:${RES} 192.168.1.10"
+[ -n "$LAN" ] && echo -e "${GREEN_COLOR}LAN:${RES} $LAN" || echo -e "${GREEN_COLOR}LAN:${RES} 10.0.0.1"
 [ -n "$ROOT_PASSWORD" ] \
     && echo -e "${GREEN_COLOR}Default Password:${RES} ${BLUE_COLOR}$ROOT_PASSWORD${RES}" \
     || echo -e "${GREEN_COLOR}Default Password:${RES} (${YELLOW_COLOR}No password${RES})"
@@ -299,6 +299,8 @@ bash 01-prepare_base-mainline.sh
 bash 02-prepare_package.sh
 bash 04-fix_kmod.sh
 bash 05-fix-source.sh
+bash 06-prepare_adguard_core.sh
+bash 07-preset_mihimo_core.sh
 [ -f "10-custom.sh" ] && bash 10-custom.sh
 find feeds -type f -name "*.orig" -exec rm -f {} \;
 [ "$(whoami)" = "runner" ] && endgroup
@@ -335,7 +337,7 @@ fi
 
 # bpf
 curl -s $mirror/openwrt/generic/config-bpf >> .config
-[ "$ENABLE_BPF" = "y" ] && curl -s $mirror/openwrt/generic/config-bpf >> .config
+[ "$ENABLE_BPF" != "y" ] && sed -i '/KERNEL_DEBUG_INFO\|KERNEL_MODULE_ALLOW_BTF/d' .config
 
 # LTO
 export ENABLE_LTO=$ENABLE_LTO
@@ -426,12 +428,11 @@ fi
 # Toolchain Cache
 if [ "$BUILD_FAST" = "y" ]; then
     [ "$ENABLE_GLIBC" = "y" ] && LIBC=glibc || LIBC=musl
-    [ "$isCN" = "CN" ] && github_proxy="ghp.ci/" || github_proxy=""
     echo -e "\n${GREEN_COLOR}Download Toolchain ...${RES}"
     PLATFORM_ID=""
     [ -f /etc/os-release ] && source /etc/os-release
-    if [ "$PLATFORM_ID" = "platform:el9" ]; then
-    TOOLCHAIN_URL="http://127.0.0.1:8080"
+    if [ "$PLATFORM_ID" = "platform:el10" ]; then
+        TOOLCHAIN_URL="http://127.0.0.1:8080"
     else
         TOOLCHAIN_URL=https://"$github_proxy"github.com/sbwml/openwrt_caches/releases/download/openwrt-25.12
     fi
