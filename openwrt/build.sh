@@ -97,7 +97,10 @@ elif [ "$1" = "rc2" ]; then
 fi
 
 # lan
-[ -n "$LAN" ] && export LAN=$LAN || export LAN=10.0.0.1
+[ -n "$LAN" ] && export LAN=$LAN || export LAN=192.168.1.10
+
+# mihomo_core (从环境变量读取，默认 meta)
+export mihomo_core="${mihomo_core:-meta}"
 
 # platform
 case "$2" in
@@ -277,6 +280,8 @@ scripts=(
   03-convert_translation.sh
   04-fix_kmod.sh
   05-fix-source.sh
+  06-prepare_adguard_core.sh
+  07-preset_mihimo_core.sh
   99_clean_build_cache.sh
 )
 for script in "${scripts[@]}"; do
@@ -294,6 +299,8 @@ bash 01-prepare_base-mainline.sh
 bash 02-prepare_package.sh
 bash 04-fix_kmod.sh
 bash 05-fix-source.sh
+bash 06-prepare_adguard_core.sh
+bash 07-preset_mihimo_core.sh
 [ -f "10-custom.sh" ] && bash 10-custom.sh
 find feeds -type f -name "*.orig" -exec rm -f {} \;
 [ "$(whoami)" = "runner" ] && endgroup
