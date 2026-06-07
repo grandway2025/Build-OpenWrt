@@ -425,6 +425,23 @@ fi
 # add to core
 [ "$OPENWRT_CORE" = "y" ] && curl -s $mirror/openwrt/generic/config-build-only >> .config
 
+# Fix recursive dependency warnings
+sed -i \
+    -e '/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_ChinaDNS_NG/d' \
+    -e '/CONFIG_PACKAGE_ChinaDNS_NG/d' \
+    -e '/CONFIG_PACKAGE_chinadns-ng/d' \
+    -e '/CONFIG_PACKAGE_mihomo-alpha/d' \
+    -e '/CONFIG_PACKAGE_mihomo-meta/d' \
+    .config
+case "$mihomo_core" in
+    alpha)
+        echo 'CONFIG_PACKAGE_mihomo-alpha=y' >> .config
+        ;;
+    meta|*)
+        echo 'CONFIG_PACKAGE_mihomo-meta=y' >> .config
+        ;;
+esac
+
 # Toolchain Cache
 if [ "$BUILD_FAST" = "y" ]; then
     [ "$ENABLE_GLIBC" = "y" ] && LIBC=glibc || LIBC=musl
