@@ -97,10 +97,7 @@ elif [ "$1" = "rc2" ]; then
 fi
 
 # lan
-[ -n "$LAN" ] && export LAN=$LAN || export LAN=192.168.1.10
-
-# mihomo_core (从环境变量读取，默认 meta)
-export mihomo_core="${mihomo_core:-meta}"
+[ -n "$LAN" ] && export LAN=$LAN || export LAN=10.0.0.1
 
 # platform
 case "$2" in
@@ -280,8 +277,6 @@ scripts=(
   03-convert_translation.sh
   04-fix_kmod.sh
   05-fix-source.sh
-  06-prepare_adguard_core.sh
-  07-preset_mihimo_core.sh
   99_clean_build_cache.sh
 )
 for script in "${scripts[@]}"; do
@@ -299,8 +294,6 @@ bash 01-prepare_base-mainline.sh
 bash 02-prepare_package.sh
 bash 04-fix_kmod.sh
 bash 05-fix-source.sh
-bash 06-prepare_adguard_core.sh
-bash 07-preset_mihimo_core.sh
 [ -f "10-custom.sh" ] && bash 10-custom.sh
 find feeds -type f -name "*.orig" -exec rm -f {} \;
 [ "$(whoami)" = "runner" ] && endgroup
@@ -434,11 +427,9 @@ if [ "$BUILD_FAST" = "y" ]; then
     if [ "$PLATFORM_ID" = "platform:el10" ]; then
         TOOLCHAIN_URL="http://127.0.0.1:8080"
     else
-        TOOLCHAIN_URL=https://"$github_proxy"github.com/grandway2025/Toolchain-Cache/releases/download/openwrt-25.12
+        TOOLCHAIN_URL=https://"$github_proxy"github.com/sbwml/openwrt_caches/releases/download/openwrt-25.12
     fi
     curl -L ${TOOLCHAIN_URL}/toolchain_${LIBC}_${toolchain_arch}_gcc-${gcc_version}${tools_suffix}.tar.zst -o toolchain.tar.zst $CURL_BAR
-    echo -e "\n${GREEN_COLOR}Downloaded toolchain:${RES}"
-    ls -lh toolchain.tar.zst
     echo -e "\n${GREEN_COLOR}Process Toolchain ...${RES}"
     tar -I "zstd" -xf toolchain.tar.zst
     rm -f toolchain.tar.zst

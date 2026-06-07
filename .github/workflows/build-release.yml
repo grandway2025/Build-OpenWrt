@@ -29,13 +29,8 @@ on:
       lan_addr:
         description: 'Setting default LAN address'
         required: true
-        default: '192.168.1.10'
+        default: '10.0.0.1'
         type: string
-      mihomo_core:
-        description: 'mihomo core type'
-        default: 'meta'
-        type: choice
-        options: ['meta', 'smart']
       root_password:
         description: 'Setting default root password (Optional, No password by default)'
         required: false
@@ -131,12 +126,10 @@ jobs:
       id: compile
       continue-on-error: true
       env:
-        git_name: grandway2025
-        git_password: ${{ secrets.CLONE_TOKEN }}
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+        git_name: ${{ secrets.username }}
+        git_password: ${{ secrets.password }}
       run: |
         export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_GCC15=y
-        export mihomo_core="${{ github.event.inputs.mihomo_core }}"
         [ ${{ github.event.inputs.ccache }} = 'true' ] && export ENABLE_CCACHE=y
         [ -n ${{ github.event.inputs.root_password }} ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
         bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ env.build_version }} ${{ github.event.inputs.device }}
@@ -237,7 +230,7 @@ jobs:
         name: ${{ env.latest_release }}
         allowUpdates: true
         tag: ${{ env.latest_release }}
-        commit: ${{ github.ref_name }}
+        commit: master
         replacesArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.build_dir }}/rom/*
