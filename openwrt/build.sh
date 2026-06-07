@@ -424,6 +424,58 @@ fi
 # add to core
 [ "$OPENWRT_CORE" = "y" ] && curl -s $mirror/openwrt/generic/config-build-only >> .config
 
+# Fix package metadata warnings and recursive dependency warnings
+# 1. Remove packages whose dependencies are unavailable in current feeds
+rm -rf \
+    package/feeds/packages/gst1-plugins-base \
+    package/feeds/packages/gst1-libav \
+    package/feeds/packages/gst1-plugins-bad \
+    package/feeds/packages/dmapd \
+    package/feeds/packages/gnunet \
+    package/feeds/luci/luci-app-mjpg-streamer \
+    package/feeds/packages/onionshare-cli
+# 2. Fix luci-app-ssr-plus recursive dependency caused by ChinaDNS_NG option
+find package feeds -type f -name Makefile 2>/dev/null | while read -r mk; do
+    case "$mk" in
+        *luci-app-ssr-plus*)
+            sed -i \
+                -e '/ChinaDNS_NG/d' \
+                -e '/chinadns-ng/d' \
+                "$mk"
+            ;;
+    esac
+done
+# 3. Fix mihomo-alpha <-> mihomo-meta recursive dependency in package Makefiles
+find package feeds -type f -name Makefile 2>/dev/null | while read -r mk; do
+    case "$mk" in
+        *mihomo*|*openclash*|*luci-app-mihomo*)
+            sed -i -E \
+                -e 's/[[:space:]]*\+PACKAGE_mihomo-alpha(:[A-Za-z0-9_+@.-]+)?//g' \
+                -e 's/[[:space:]]*\+PACKAGE_mihomo-meta(:[A-Za-z0-9_+@.-]+)?//g' \
+                -e 's/[[:space:]]*@PACKAGE_mihomo-alpha//g' \
+                -e 's/[[:space:]]*@PACKAGE_mihomo-meta//g' \
+                "$mk"
+            ;;
+    esac
+done
+# 4. Clean .config selection again
+sed -i \
+    -e '/CONFIG_PACKAGE_luci-app-ssr-plus_INCLUDE_ChinaDNS_NG/d' \
+    -e '/CONFIG_PACKAGE_ChinaDNS_NG/d' \
+    -e '/CONFIG_PACKAGE_chinadns-ng/d' \
+    -e '/CONFIG_PACKAGE_mihomo-alpha/d' \
+    -e '/CONFIG_PACKAGE_mihomo-meta/d' \
+    .config
+# 5. Select only one mihomo core
+case "$mihomo_core" in
+    alpha)
+        echo 'CONFIG_PACKAGE_mihomo-alpha=y' >> .config
+        ;;
+    meta|*)
+        echo 'CONFIG_PACKAGE_mihomo-meta=y' >> .config
+        ;;
+esac
+
 # Toolchain Cache
 if [ "$BUILD_FAST" = "y" ]; then
     [ "$ENABLE_GLIBC" = "y" ] && LIBC=glibc || LIBC=musl
