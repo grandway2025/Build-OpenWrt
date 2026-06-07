@@ -303,8 +303,13 @@ bash 06-prepare_adguard_core.sh
 bash 07-preset_mihimo_core.sh
 [ -f "10-custom.sh" ] && bash 10-custom.sh
 find feeds -type f -name "*.orig" -exec rm -f {} \;
+# Drop packages whose dependencies are unavailable in current feeds.
+# This keeps package metadata clean and avoids repeated defconfig warnings.
+rm -rf \
+    package/feeds/packages/gst1-plugins-base \
+    package/feeds/luci/luci-app-mjpg-streamer \
+    package/feeds/packages/onionshare-cli
 [ "$(whoami)" = "runner" ] && endgroup
-
 rm -f 0*-*.sh 10-custom.sh
 
 # Load devices Config
