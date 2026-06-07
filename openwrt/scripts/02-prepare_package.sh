@@ -155,6 +155,8 @@ git clone https://$github/sbwml/luci-app-mentohust package/new/mentohust
 rm -rf feeds/packages/utils/coremark
 git clone https://$github/sbwml/openwrt_pkgs package/new/custom --depth=1
 rm -rf package/new/custom/ddns-scripts-aliyun
+rm -rf package/new/custom/luci-app-adguardhome
+
 # coremark - prebuilt with gcc15
 curl -s $mirror/openwrt/patch/coremark/coremark.aarch64-16-threads > package/new/custom/coremark/src/musl/coremark.aarch64
 
