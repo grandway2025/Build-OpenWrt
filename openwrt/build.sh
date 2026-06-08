@@ -304,6 +304,7 @@ bash 07-preset_mihimo_core.sh
 [ -f "10-custom.sh" ] && bash 10-custom.sh
 find feeds -type f -name "*.orig" -exec rm -f {} \;
 [ "$(whoami)" = "runner" ] && endgroup
+
 rm -f 0*-*.sh 10-custom.sh
 
 # Load devices Config
