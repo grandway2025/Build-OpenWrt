@@ -43,50 +43,32 @@ wget -qO files/etc/openclash/GeoSite.dat "$GEOSITE_URL"
 chmod +x files/etc/openclash/core/clash_meta
 echo "mihomo core preset done."
 
-# ============================================================
-# Copy custom rootfs files from repository
-# Repository path: Build-OpenWrt/files
-# Current path:    Build-OpenWrt/openwrt
-# Target path:     Build-OpenWrt/openwrt/files
-# ============================================================
-# ============================================================
-# Copy custom rootfs files from repository
-# ============================================================
 echo "Copy custom rootfs files from repository ..."
 echo "Current directory:"
 pwd
-echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE:-}"
+echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE:-unset}"
+
 CUSTOM_FILES_DIR=""
-# 依次尝试多个可能位置
-for dir in \
-    "../files" \
-    "${GITHUB_WORKSPACE:-}/files" \
-    "/builder/files" \
-    "/workdir/files"
-do
-    if [ -n "$dir" ] && [ -d "$dir" ]; then
-        CUSTOM_FILES_DIR="$dir"
-        break
-    fi
-done
-if [ -n "$CUSTOM_FILES_DIR" ]; then
-    echo "Found custom files directory: $CUSTOM_FILES_DIR"
+
+if [ -n "${GITHUB_WORKSPACE:-}" ] && [ -d "${GITHUB_WORKSPACE}/files" ]; then
+    CUSTOM_FILES_DIR="${GITHUB_WORKSPACE}/files"
+elif [ -d "/home/runner/work/Build-OpenWrt/Build-OpenWrt/files" ]; then
+    CUSTOM_FILES_DIR="/home/runner/work/Build-OpenWrt/Build-OpenWrt/files"
+elif [ -d "../files" ]; then
+    CUSTOM_FILES_DIR="../files"
+elif [ -d "./files" ]; then
+    CUSTOM_FILES_DIR="./files"
+fi
+
+if [ -n "${CUSTOM_FILES_DIR}" ]; then
+    echo "Found custom files directory: ${CUSTOM_FILES_DIR}"
     mkdir -p files
-    cp -a "$CUSTOM_FILES_DIR"/. files/
-    echo "Custom files copied to openwrt/files"
-    # 兼容 OpenClash model 文件名
-    if [ -s files/etc/openclash/model-large.bin ]; then
-        ln -sf model-large.bin files/etc/openclash/model.bin
-        echo "Created symlink: files/etc/openclash/model.bin -> model-large.bin"
-    fi
-    echo "Final custom file list:"
-    ls -lh files/etc/config/openclash 2>/dev/null || true
-    ls -lh files/etc/config/nikki 2>/dev/null || true
-    ls -lh files/etc/openclash/model-large.bin 2>/dev/null || true
-    ls -lh files/etc/openclash/model.bin 2>/dev/null || true
+    cp -af "${CUSTOM_FILES_DIR}/." files/
+    echo "Custom files copied to OpenWrt files/."
+    find files/etc -maxdepth 3 -type f 2>/dev/null || true
 else
     echo "Warning: custom files directory not found, skip."
     echo "Debug path list:"
-    ls -la .. 2>/dev/null || true
-    ls -la "${GITHUB_WORKSPACE:-/not-set}" 2>/dev/null || true
+    ls -la "${GITHUB_WORKSPACE:-.}" || true
+    ls -la /home/runner/work/Build-OpenWrt/Build-OpenWrt || true
 fi
