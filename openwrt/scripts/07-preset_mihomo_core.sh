@@ -42,3 +42,28 @@ wget -qO files/etc/openclash/GeoSite.dat "$GEOSITE_URL"
 
 chmod +x files/etc/openclash/core/clash_meta
 echo "mihomo core preset done."
+
+# ============================================================
+# Copy custom rootfs files from repository
+# Repository path: Build-OpenWrt/files
+# Current path:    Build-OpenWrt/openwrt
+# Target path:     Build-OpenWrt/openwrt/files
+# ============================================================
+echo "Copy custom rootfs files from repository ..."
+if [ -d ../files ]; then
+    mkdir -p files
+    cp -a ../files/. files/
+    echo "Custom files copied."
+    # Compatibility for OpenClash model file
+    if [ -s files/etc/openclash/model-large.bin ]; then
+        ln -sf model-large.bin files/etc/openclash/model.bin
+        echo "Created symlink: files/etc/openclash/model.bin -> model-large.bin"
+    fi
+    echo "Final custom file list:"
+    ls -lh files/etc/config/openclash 2>/dev/null || true
+    ls -lh files/etc/config/nikki 2>/dev/null || true
+    ls -lh files/etc/openclash/model-large.bin 2>/dev/null || true
+    ls -lh files/etc/openclash/model.bin 2>/dev/null || true
+else
+    echo "Warning: repository ../files directory not found, skip."
+fi
