@@ -281,7 +281,7 @@ scripts=(
   04-fix_kmod.sh
   05-fix-source.sh
   06-prepare_adguard_core.sh
-  07-preset_mihimo_core.sh
+  07-preset_mihomo_core.sh
   99_clean_build_cache.sh
 )
 for script in "${scripts[@]}"; do
@@ -300,7 +300,7 @@ bash 02-prepare_package.sh
 bash 04-fix_kmod.sh
 bash 05-fix-source.sh
 bash 06-prepare_adguard_core.sh
-bash 07-preset_mihimo_core.sh
+bash 07-preset_mihomo_core.sh
 [ -f "10-custom.sh" ] && bash 10-custom.sh
 find feeds -type f -name "*.orig" -exec rm -f {} \;
 [ "$(whoami)" = "runner" ] && endgroup
