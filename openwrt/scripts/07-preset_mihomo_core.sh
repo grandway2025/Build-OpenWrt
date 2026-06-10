@@ -49,12 +49,32 @@ echo "mihomo core preset done."
 # Current path:    Build-OpenWrt/openwrt
 # Target path:     Build-OpenWrt/openwrt/files
 # ============================================================
+# ============================================================
+# Copy custom rootfs files from repository
+# ============================================================
 echo "Copy custom rootfs files from repository ..."
-if [ -d ../files ]; then
+echo "Current directory:"
+pwd
+echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE:-}"
+CUSTOM_FILES_DIR=""
+# 依次尝试多个可能位置
+for dir in \
+    "../files" \
+    "${GITHUB_WORKSPACE:-}/files" \
+    "/builder/files" \
+    "/workdir/files"
+do
+    if [ -n "$dir" ] && [ -d "$dir" ]; then
+        CUSTOM_FILES_DIR="$dir"
+        break
+    fi
+done
+if [ -n "$CUSTOM_FILES_DIR" ]; then
+    echo "Found custom files directory: $CUSTOM_FILES_DIR"
     mkdir -p files
-    cp -a ../files/. files/
-    echo "Custom files copied."
-    # Compatibility for OpenClash model file
+    cp -a "$CUSTOM_FILES_DIR"/. files/
+    echo "Custom files copied to openwrt/files"
+    # 兼容 OpenClash model 文件名
     if [ -s files/etc/openclash/model-large.bin ]; then
         ln -sf model-large.bin files/etc/openclash/model.bin
         echo "Created symlink: files/etc/openclash/model.bin -> model-large.bin"
@@ -65,5 +85,8 @@ if [ -d ../files ]; then
     ls -lh files/etc/openclash/model-large.bin 2>/dev/null || true
     ls -lh files/etc/openclash/model.bin 2>/dev/null || true
 else
-    echo "Warning: repository ../files directory not found, skip."
+    echo "Warning: custom files directory not found, skip."
+    echo "Debug path list:"
+    ls -la .. 2>/dev/null || true
+    ls -la "${GITHUB_WORKSPACE:-/not-set}" 2>/dev/null || true
 fi
