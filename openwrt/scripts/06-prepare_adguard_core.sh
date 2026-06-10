@@ -19,7 +19,8 @@ mkdir -p files/usr/bin
 
 AGH_CORE=$(curl -sL https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest | grep "browser_download_url.*AdGuardHome_linux_${AGH_ARCH}.tar.gz" | head -n1 | awk -F '"' '{print $4}')
 
-wget -qO- $AGH_CORE | tar xOvz > files/usr/bin/AdGuardHome
+# wget -qO- $AGH_CORE | tar xOvz > files/usr/bin/AdGuardHome
+curl -L "${AGH_CORE}" | tar -xzO "AdGuardHome/AdGuardHome" > files/usr/bin/AdGuardHome
 
 chmod +x files/usr/bin/AdGuardHome
 
