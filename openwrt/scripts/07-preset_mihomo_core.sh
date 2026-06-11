@@ -3,6 +3,7 @@ set -e
 
 # 创建 OpenClash 核心目录（若不存在则自动创建）
 mkdir -p files/etc/openclash/core
+mkdir -p files/etc/config
 
 # 根据平台设置 core 架构
 case "${platform:-}" in
@@ -35,6 +36,9 @@ CLASH_META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/maste
 # 定义 geoip.dat、geosite.dat 下载链接
 GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
 GEOSITE_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+MODEL_URL="https://github.com/vernesong/mihomo/releases/download/LightGBM-Model/model.bin"
+CLASH_URL="https://github.com/grandway2025/default-settings/releases/download/settings/openclash"
+NIKKI_URL="https://github.com/grandway2025/default-settings/releases/download/settings/nikki"
 
 echo "platform=${platform:-unset}"
 echo "core=${core}"
@@ -44,6 +48,10 @@ echo "CLASH_META_URL=${CLASH_META_URL}"
 
 # 下载并解压 Clash Meta 内核，输出为 clash_meta 可执行文件
 wget -qO- "${CLASH_META_URL}" | tar xOvz > files/etc/openclash/core/clash_meta
+
+wget -qO- $MODEL_URL > files/etc/openclash/model.bin
+wget -qO- $CLASH_URL > files/etc/config/openclash
+wget -qO- $NIKKI_URL > files/etc/config/nikki
 
 # 检查 Clash Meta 内核是否下载成功
 if [ ! -s files/etc/openclash/core/clash_meta ]; then
@@ -68,7 +76,20 @@ if [ ! -s files/etc/openclash/GeoSite.dat ]; then
     exit 1
 fi
 
+# 检查 openclash / nikki /  model.bin 是否下载成功
+if [ ! -s files/etc/config/openclash]; then
+    echo "Error: openclash download failed."
+    exit 1
+fi
+
+if [ ! -s files/etc/config/nikki ]; then
+    echo "Error: Nikki download failed."
+    exit 1
+fi
+
 # 赋予 Clash 核心文件可执行权限
 chmod +x files/etc/openclash/core/clash_meta
+chmod +x files/etc/config/openclash
+chmod +x files/etc/config/nikki
 
 echo "mihomo core preset done."
