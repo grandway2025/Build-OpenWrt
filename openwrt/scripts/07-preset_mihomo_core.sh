@@ -52,8 +52,6 @@ CUSTOM_FILES_DIR=""
 
 if [ -n "${GITHUB_WORKSPACE:-}" ] && [ -d "${GITHUB_WORKSPACE}/files" ]; then
     CUSTOM_FILES_DIR="${GITHUB_WORKSPACE}/files"
-elif [ -d "/home/runner/work/Build-OpenWrt/Build-OpenWrt/files" ]; then
-    CUSTOM_FILES_DIR="/home/runner/work/Build-OpenWrt/Build-OpenWrt/files"
 elif [ -d "../files" ]; then
     CUSTOM_FILES_DIR="../files"
 elif [ -d "./files" ]; then
@@ -61,14 +59,27 @@ elif [ -d "./files" ]; then
 fi
 
 if [ -n "${CUSTOM_FILES_DIR}" ]; then
+    SRC_REAL="$(readlink -f "${CUSTOM_FILES_DIR}")"
+    DST_REAL="$(readlink -f "files" 2>/dev/null || true)"
+
     echo "Found custom files directory: ${CUSTOM_FILES_DIR}"
-    mkdir -p files
-    cp -af "${CUSTOM_FILES_DIR}/." files/
-    echo "Custom files copied to OpenWrt files/."
-    find files/etc -maxdepth 3 -type f 2>/dev/null || true
+    echo "Source real path: ${SRC_REAL}"
+    echo "Target real path: ${DST_REAL:-not exists}"
+
+    if [ "${SRC_REAL}" = "${DST_REAL}" ]; then
+        echo "Custom files directory is already OpenWrt files/, skip copy."
+    else
+        mkdir -p files
+        cp -af "${CUSTOM_FILES_DIR}/." files/
+        echo "Custom files copied to OpenWrt files/."
+    fi
+
+    echo "Current OpenWrt files list:"
+    find files -maxdepth 4 -type f 2>/dev/null || true
 else
     echo "Warning: custom files directory not found, skip."
     echo "Debug path list:"
     ls -la "${GITHUB_WORKSPACE:-.}" || true
     ls -la /home/runner/work/Build-OpenWrt/Build-OpenWrt || true
+    ls -la . || true
 fi
