@@ -1,85 +1,74 @@
 #!/bin/bash
-set -euo pipefail
+set -e
 
-# 工作目录应为 openwrt/
+# 创建 OpenClash 核心目录（若不存在则自动创建）
 mkdir -p files/etc/openclash/core
 
-# 平台 → 架构映射
-case "$platform" in
-    rk3399|rk3568|rk3576|armv8)
-        core="arm64" ;;
+# 根据平台设置 core 架构
+case "${platform:-}" in
+    rockchip|rk3399|rk3568|rk3576|armv8)
+        core="arm64"
+        ;;
     x86_64)
-        core="amd64" ;;
+        core="amd64"
+        ;;
     *)
-        echo "Skip mihomo preset: unsupported platform=$platform"
-        exit 0 ;;
+        echo "Unsupported platform: ${platform:-unset}, skip mihomo core preset."
+        exit 0
+        ;;
 esac
 
 # 内核类型，默认 meta
 mihomo_core="${mihomo_core:-meta}"
 case "$mihomo_core" in
-    smart) SUBDIR="smart" ;;
-    meta|*) SUBDIR="meta" ;;
+    smart)
+        SUBDIR="smart"
+        ;;
+    meta|*)
+        SUBDIR="meta"
+        ;;
 esac
 
-CLASH_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/${SUBDIR}/clash-linux-${core}.tar.gz"
+# 根据 mihomo_core 类型生成下载链接
+CLASH_META_URL="https://raw.githubusercontent.com/vernesong/OpenClash/core/master/${SUBDIR}/clash-linux-${core}.tar.gz"
+
+# 定义 geoip.dat、geosite.dat 下载链接
 GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
 GEOSITE_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
 
-echo "Downloading mihomo core: $CLASH_URL"
-# 解压到临时目录后再移动，避免 stdout 拼接问题
-TMPDIR=$(mktemp -d)
-wget -qO- "$CLASH_URL" | tar -xz -C "$TMPDIR"
-BIN=$(find "$TMPDIR" -type f | head -n1)
-[ -n "$BIN" ] && mv "$BIN" files/etc/openclash/core/clash_meta
-rm -rf "$TMPDIR"
-[ -s files/etc/openclash/core/clash_meta ] || { echo "clash_meta download failed"; exit 1; }
+echo "platform=${platform:-unset}"
+echo "core=${core}"
+echo "mihomo_core=${mihomo_core}"
+echo "SUBDIR=${SUBDIR}"
+echo "CLASH_META_URL=${CLASH_META_URL}"
 
-wget -qO files/etc/openclash/GeoIP.dat   "$GEOIP_URL"
-wget -qO files/etc/openclash/GeoSite.dat "$GEOSITE_URL"
-[ -s files/etc/openclash/GeoIP.dat ]   || { echo "GeoIP download failed"; exit 1; }
-[ -s files/etc/openclash/GeoSite.dat ] || { echo "GeoSite download failed"; exit 1; }
+# 下载并解压 Clash Meta 内核，输出为 clash_meta 可执行文件
+wget -qO- "${CLASH_META_URL}" | tar xOvz > files/etc/openclash/core/clash_meta
 
+# 检查 Clash Meta 内核是否下载成功
+if [ ! -s files/etc/openclash/core/clash_meta ]; then
+    echo "Error: clash_meta download failed."
+    exit 1
+fi
+
+# 下载 GeoIP 数据库（IP 地址归属地信息）
+wget -qO files/etc/openclash/GeoIP.dat "${GEOIP_URL}"
+
+# 下载 GeoSite 数据库（常用域名分类信息）
+wget -qO files/etc/openclash/GeoSite.dat "${GEOSITE_URL}"
+
+# 检查 GeoIP / GeoSite 是否下载成功
+if [ ! -s files/etc/openclash/GeoIP.dat ]; then
+    echo "Error: GeoIP.dat download failed."
+    exit 1
+fi
+
+if [ ! -s files/etc/openclash/GeoSite.dat ]; then
+    echo "Error: GeoSite.dat download failed."
+    exit 1
+fi
+
+# 赋予 Clash 核心文件可执行权限
 chmod +x files/etc/openclash/core/clash_meta
+
 echo "mihomo core preset done."
-
-echo "Copy custom rootfs files from repository ..."
-echo "Current directory:"
-pwd
-echo "GITHUB_WORKSPACE=${GITHUB_WORKSPACE:-unset}"
-
-CUSTOM_FILES_DIR=""
-
-if [ -n "${GITHUB_WORKSPACE:-}" ] && [ -d "${GITHUB_WORKSPACE}/files" ]; then
-    CUSTOM_FILES_DIR="${GITHUB_WORKSPACE}/files"
-elif [ -d "../files" ]; then
-    CUSTOM_FILES_DIR="../files"
-elif [ -d "./files" ]; then
-    CUSTOM_FILES_DIR="./files"
-fi
-
-if [ -n "${CUSTOM_FILES_DIR}" ]; then
-    SRC_REAL="$(readlink -f "${CUSTOM_FILES_DIR}")"
-    DST_REAL="$(readlink -f "files" 2>/dev/null || true)"
-
-    echo "Found custom files directory: ${CUSTOM_FILES_DIR}"
-    echo "Source real path: ${SRC_REAL}"
-    echo "Target real path: ${DST_REAL:-not exists}"
-
-    if [ "${SRC_REAL}" = "${DST_REAL}" ]; then
-        echo "Custom files directory is already OpenWrt files/, skip copy."
-    else
-        mkdir -p files
-        cp -af "${CUSTOM_FILES_DIR}/." files/
-        echo "Custom files copied to OpenWrt files/."
-    fi
-
-    echo "Current OpenWrt files list:"
-    find files -maxdepth 4 -type f 2>/dev/null || true
-else
-    echo "Warning: custom files directory not found, skip."
-    echo "Debug path list:"
-    ls -la "${GITHUB_WORKSPACE:-.}" || true
-    ls -la /home/runner/work/Build-OpenWrt/Build-OpenWrt || true
-    ls -la . || true
-fi
