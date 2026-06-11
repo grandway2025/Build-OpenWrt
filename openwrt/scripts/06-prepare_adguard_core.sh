@@ -26,7 +26,7 @@ echo "core=${core}"
 echo "ADGUARDHOME_URL=${ADGUARDHOME_URL}"
 
 # 下载并解压 AdGuardHome
-wget -qO- "${ADGUARDHOME_URL}" | tar xOz AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome
+wget -qO- "${ADGUARDHOME_URL}" | tar xOz ./AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome
 
 # 检查是否下载成功
 if [ ! -s files/usr/bin/AdGuardHome ]; then
