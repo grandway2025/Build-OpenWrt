@@ -1,25 +1,41 @@
 #!/bin/bash
-set -euo pipefail
+set -e
 
-# Map OpenWrt platform → AdGuardHome arch
+# 创建 AdGuardHome 目录
+mkdir -p files/usr/bin
+
+# 根据平台设置 AdGuardHome 架构
 case "${platform:-}" in
-    x86_64)
-        AGH_ARCH="amd64"
+    rockchip|rk3399|rk3568|rk3576|armv8)
+        core="arm64"
         ;;
-    armv8|rk3399|rk3568|rk3576)
-        AGH_ARCH="arm64"
+    x86_64)
+        core="amd64"
         ;;
     *)
-        echo "[AdGuardHome] Unsupported platform: ${platform:-unset}, skip."
+        echo "Unsupported platform: ${platform:-unset}, skip AdGuardHome core preset."
         exit 0
         ;;
 esac
 
-mkdir -p files/usr/bin
+# AdGuardHome 下载链接
+ADGUARDHOME_URL="https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_${core}.tar.gz"
 
-AGH_CORE=$(curl -sL https://api.github.com/repos/AdguardTeam/AdGuardHome/releases/latest | grep "browser_download_url.*AdGuardHome_linux_${AGH_ARCH}.tar.gz" | head -n1 | awk -F '"' '{print $4}')
+echo "platform=${platform:-unset}"
+echo "core=${core}"
+echo "ADGUARDHOME_URL=${ADGUARDHOME_URL}"
 
-curl -L "${AGH_CORE}" | tar -xzO "./AdGuardHome/AdGuardHome" > files/usr/bin/AdGuardHome
+# 下载并解压 AdGuardHome
+wget -qO- "${ADGUARDHOME_URL}" | tar xOz AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome
 
+# 检查是否下载成功
+if [ ! -s files/usr/bin/AdGuardHome ]; then
+    echo "Error: AdGuardHome core download failed."
+    exit 1
+fi
+
+# 赋予执行权限
 chmod +x files/usr/bin/AdGuardHome
 
+echo "AdGuardHome core preset done."
+ls -lh files/usr/bin/AdGuardHome
