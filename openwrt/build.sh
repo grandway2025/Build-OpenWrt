@@ -332,6 +332,12 @@ else
     [ "$platform" = "armv8" ] && sed -i '/DOCKER/Id' .config
 fi
 
+# AdGuardHome
+sed -i '/CONFIG_PACKAGE_adguardhome/d' .config
+cat >> .config <<EOF
+CONFIG_PACKAGE_adguardhome=y
+EOF
+
 # ota
 [ "$ENABLE_OTA" = "y" ] && [ "$version" = "rc2" ] && echo 'CONFIG_PACKAGE_luci-app-ota=y' >> .config
 
