@@ -53,7 +53,7 @@ CONFIG_LUCI_LANG_zh_Hans=y
 
 ### AdGuardHome
 CONFIG_PACKAGE_adguardhome=y
-# CONFIG_PACKAGE_luci-app-adguardhome=y
+# CONFIG_PACKAGE_luci-app-adguardhome is not set
 
 ### Nginx
 CONFIG_PACKAGE_nginx-ssl=y
