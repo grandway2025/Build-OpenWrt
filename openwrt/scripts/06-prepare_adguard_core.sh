@@ -3,7 +3,8 @@ set -e
 
 # 创建 AdGuardHome 目录
 mkdir -p files/usr/bin
-mkdir -p files/etc
+mkdir -p files/etc/adguardhome
+mkdir -p files/etc/config
 
 # 根据平台设置 AdGuardHome 架构
 case "${platform:-}" in
