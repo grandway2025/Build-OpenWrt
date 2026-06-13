@@ -51,10 +51,6 @@ CONFIG_LUCI_LANG_zh_Hans=y
 # CONFIG_LUCI_CSSTIDY is not set
 # CONFIG_LUCI_JSMIN is not set
 
-### AdGuardHome
-CONFIG_PACKAGE_adguardhome=y
-# CONFIG_PACKAGE_luci-app-adguardhome is not set
-
 ### Nginx
 CONFIG_PACKAGE_nginx-ssl=y
 CONFIG_PACKAGE_nginx-mod-brotli=y
