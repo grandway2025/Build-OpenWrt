@@ -21,7 +21,7 @@ esac
 
 # AdGuardHome 下载链接
 ADGUARDHOME_URL="https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_${core}.tar.gz"
-ADGUARDHOME_YAML_URL="https://github.com/grandway2025/default-settings/releases/download/settings/AdGuardHome.yaml"
+YAML_URL="https://github.com/grandway2025/default-settings/releases/download/settings/AdGuardHome.yaml"
 
 echo "platform=${platform:-unset}"
 echo "core=${core}"
@@ -29,7 +29,7 @@ echo "ADGUARDHOME_URL=${ADGUARDHOME_URL}"
 
 # 下载并解压 AdGuardHome
 wget -qO- "${ADGUARDHOME_URL}" | tar xOz ./AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome
-wget -qO files/etc/adguardhome/adguardhome.yaml "${ADGUARDHOME_YAML_URL}"
+wget -qO files/etc/adguardhome/adguardhome.yaml "${YAML_URL}"
 
 # 检查是否下载成功
 if [ ! -s files/usr/bin/AdGuardHome ]; then
