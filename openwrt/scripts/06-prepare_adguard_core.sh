@@ -37,7 +37,7 @@ if [ ! -s files/usr/bin/AdGuardHome ]; then
     exit 1
 fi
 
-if [ ! -s files/etc/AdGuardHome.yaml ]; then
+if [ ! -s files/etc/adguardhome/adguardhome.yaml ]; then
   echo "Error: AdGuardHome.yaml download failed."
   exit 1
 fi
