@@ -3,6 +3,7 @@ set -e
 
 # 创建 AdGuardHome 目录
 mkdir -p files/usr/bin
+mkdir -p files/etc
 
 # 根据平台设置 AdGuardHome 架构
 case "${platform:-}" in
@@ -20,6 +21,7 @@ esac
 
 # AdGuardHome 下载链接
 ADGUARDHOME_URL="https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_${core}.tar.gz"
+ADGUARDHOME_YAML_URL="https://github.com/grandway2025/default-settings/releases/download/settings/AdGuardHome.yaml"
 
 echo "platform=${platform:-unset}"
 echo "core=${core}"
@@ -27,6 +29,7 @@ echo "ADGUARDHOME_URL=${ADGUARDHOME_URL}"
 
 # 下载并解压 AdGuardHome
 wget -qO- "${ADGUARDHOME_URL}" | tar xOz ./AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome
+wget -qO files/etc/AdGuardHome.yaml "${ADGUARDHOME_YAML_URL}"
 
 # 检查是否下载成功
 if [ ! -s files/usr/bin/AdGuardHome ]; then
@@ -34,8 +37,13 @@ if [ ! -s files/usr/bin/AdGuardHome ]; then
     exit 1
 fi
 
+if [ ! -s files/etc/AdGuardHome.yaml ]; then
+  echo "Error: AdGuardHome.yaml download failed."
+  exit 1
+fi
+
 # 赋予执行权限
 chmod +x files/usr/bin/AdGuardHome
 
 echo "AdGuardHome core preset done."
-ls -lh files/usr/bin/AdGuardHome
+ls -lh files/usr/bin/AdGuardHome files/etc/AdGuardHome.yaml files/etc/config/adguardhome
