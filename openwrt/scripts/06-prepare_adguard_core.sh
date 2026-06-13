@@ -30,7 +30,7 @@ echo "ADGUARDHOME_URL=${ADGUARDHOME_URL}"
 
 # 下载并解压 AdGuardHome
 wget -qO- "${ADGUARDHOME_URL}" | tar xOz ./AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome
-wget -qO files/etc/AdGuardHome.yaml "${ADGUARDHOME_YAML_URL}"
+wget -qO files/etc/adguardhome/adguardhome.yaml "${ADGUARDHOME_YAML_URL}"
 
 # 检查是否下载成功
 if [ ! -s files/usr/bin/AdGuardHome ]; then
