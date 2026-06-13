@@ -26,6 +26,7 @@ YAML_URL="https://github.com/grandway2025/default-settings/releases/download/set
 echo "platform=${platform:-unset}"
 echo "core=${core}"
 echo "ADGUARDHOME_URL=${ADGUARDHOME_URL}"
+echo "YAML_URL=${YAML_URL}"
 
 # 下载并解压 AdGuardHome
 wget -qO- "${ADGUARDHOME_URL}" | tar xOz ./AdGuardHome/AdGuardHome > files/usr/bin/AdGuardHome
