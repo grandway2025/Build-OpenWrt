@@ -46,4 +46,4 @@ fi
 chmod +x files/usr/bin/AdGuardHome
 
 echo "AdGuardHome core preset done."
-ls -lh files/usr/bin/AdGuardHome files/etc/AdGuardHome.yaml files/etc/config/adguardhome
+ls -lh files/usr/bin/AdGuardHome files/etc/adguardhome/adguardhome.yaml 
