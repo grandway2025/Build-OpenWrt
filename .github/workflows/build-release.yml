@@ -22,6 +22,16 @@ on:
         options:
           - 'release'
           - 'snapshot-25.12'
+      info_mode:
+        description: 'Release 信息展示模式'
+        required: true
+        default: 'curated'
+        type: choice
+        options:
+          - 'curated'   # 精选插件
+          - 'all'       # 全量 LuCI
+          - 'both'      # 精选 + 全量
+          - 'minimal'   # 仅版本/设备/校验
       ccache:
         description: 'Enable ccache (Use Cache to speed up next build)'
         type: boolean
@@ -174,19 +184,30 @@ jobs:
         key: openwrt-25.12-${{ github.event.inputs.device }}-ccache
 
     - name: Create ccache tar files
-      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
+      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
       continue-on-error: true
       working-directory: /builder
       run: |
         mkdir -p ccache
         tar cf - .ccache | split -d -b 1800m - ccache/${{ github.event.inputs.device }}.tar.
 
+    - name: Generate ccache release info
+      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
+      working-directory: /builder
+      run: bash $GITHUB_WORKSPACE/r4s_build_script/scripts/gen-release-info.sh
+      env:
+        RELEASE_TAG:  ccache-${{ github.event.inputs.device }}
+        DEVICE:       ${{ github.event.inputs.device }}
+        INFO_MODE:    minimal
+        OUTPUT_FILE:  /builder/info/ccache-info.md
+        
     - name: Upload Cached (releases - ccache)
       if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
       continue-on-error: true
       uses: ncipollo/release-action@main
       with:
         name: ccache
+        bodyFile: /builder/info/ccache-info.md   # ← 新增
         allowUpdates: true
         tag: ccache
         commit: master
