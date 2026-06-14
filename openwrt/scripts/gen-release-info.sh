@@ -163,9 +163,7 @@ render_all_luci() {
 render_footer_full() {
     cat <<'EOF'
 ## 📝 校验信息
-
-> SHA256 校验请见同名 `sha256sums.txt` 文件
-
+> 每个固件文件的 SHA256 见上方 Assets 列表右侧（GitHub 自带校验）
 ---
 > 💡 刷机有风险，请确保固件完整性后再刷入设备
 EOF
@@ -174,7 +172,7 @@ EOF
 render_footer_minimal() {
     cat <<'EOF'
 ---
-> SHA256 校验请见同名 `sha256sums.txt` 文件
+> SHA256 校验见 Assets 列表右侧
 EOF
 }
 
