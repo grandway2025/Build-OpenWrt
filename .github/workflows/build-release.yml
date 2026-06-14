@@ -245,6 +245,24 @@ jobs:
           cd rom && sha256sum * > ../info/sha256sums.txt
         fi
 
+    - name: Generate release info
+      working-directory: /builder
+      run: bash $GITHUB_WORKSPACE/r4s_build_script/scripts/gen-release-info.sh
+      env:
+        RELEASE_TAG:    ${{ env.latest_release }}
+        DEVICE:         ${{ github.event.inputs.device }}
+        LAN_ADDR:       ${{ env.lan }}
+        ROOT_PASSWORD:  ${{ env.password }}
+        KERNEL_VERSION: ${{ env.kernel }}
+        GCC_VERSION:    ${{ github.event.inputs.gcc }}
+        WEB_SERVER:     ${{ github.event.inputs.nginx == 'true' && 'nginx' || 'uhttpd' }}
+        MIHOMO_CORE:    ${{ github.event.inputs.mihomo }}
+        DOCKER:         ${{ github.event.inputs.docker }}
+        BUILD_OPTIONS:  ${{ env.build_options }}
+        MANIFEST_FILE:  /builder/openwrt/bin/targets/x86/64/openwrt-x86-64.manifest
+        OUTPUT_FILE:    /builder/info/info.md
+        INFO_MODE:      ${{ github.event.inputs.info_mode || 'curated' }}
+        
     - name: Upload artifacts
       uses: actions/upload-artifact@main
       with:
@@ -259,6 +277,7 @@ jobs:
         allowUpdates: true
         tag: ${{ env.latest_release }}
         commit: ${{ github.ref_name }}
+        bodyFile: /builder/info/info.md          # ← 新增这行
         replacesArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.build_dir }}/rom/*
