@@ -9,275 +9,393 @@ on:
         default: 'x86_64'
         type: choice
         options:
-          - 'armv8'
-          - 'nanopi-r4s'
-          - 'nanopi-r5s'
-          - 'nanopi-r76s'
-          - 'x86_64'
+          - armv8
+          - nanopi-r4s
+          - nanopi-r5s
+          - nanopi-r76s
+          - x86_64
+
       version:
         description: 'Select the build version'
         required: true
         default: 'release'
         type: choice
         options:
-          - 'release'
-          - 'snapshot-25.12'
+          - release
+          - snapshot-25.12
+
       info_mode:
         description: 'Release 信息展示模式'
         required: true
         default: 'curated'
         type: choice
         options:
-          - 'curated'   # 精选插件
-          - 'all'       # 全量 LuCI
-          - 'both'      # 精选 + 全量
-          - 'minimal'   # 仅版本/设备/校验
+          - curated
+          - all
+          - both
+          - minimal
+
       ccache:
-        description: 'Enable ccache (Use Cache to speed up next build)'
+        description: 'Enable ccache'
         type: boolean
         default: false
+
       lan_addr:
-        description: 'Setting default LAN address'
+        description: 'Default LAN address'
         required: true
         default: '192.168.1.10'
         type: string
+
       mihomo_core:
-        description: 'mihomo core type'
+        description: 'Mihomo core type'
+        required: true
         default: 'meta'
         type: choice
-        options: ['meta', 'smart']
+        options:
+          - meta
+          - smart
+
       root_password:
-        description: 'Setting default root password (Optional, No password by default)'
+        description: 'Default root password, empty means no password'
         required: false
         default: ''
         type: string
+
       build_options:
-        description: 'Build options (separate multiple options with spaces)'
+        description: 'Build options, separated by spaces'
         required: false
         default: 'BUILD_FAST=y ENABLE_BPF=y ENABLE_LTO=y ENABLE_LRNG=y ENABLE_MOLD=y KERNEL_CLANG_LTO=y'
         type: string
 
 jobs:
   build:
-    name: Build ${{ github.event.inputs.device }}
+    name: Build ${{ inputs.device }}
     runs-on: ubuntu-24.04
+
     defaults:
       run:
         shell: bash
 
+    env:
+      BUILD_DIR: /builder
+      SCRIPT_DIR: ${{ github.workspace }}/r4s_build_script
+      RELEASE_INFO_SCRIPT: ${{ github.workspace }}/r4s_build_script/scripts/gen-release-info.sh
+      CACHE_KEY: openwrt-25.12-${{ inputs.device }}-ccache
+      IS_RELEASE_CCACHE_DEVICE: ${{ inputs.device == 'armv8' || inputs.device == 'nanopi-r4s' }}
+
     steps:
-    - name: Checkout
-      continue-on-error: true
-      uses: actions/checkout@main
-      with:
-        path: r4s_build_script
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: r4s_build_script
 
-    - name: Setup variables
-      run: |
-        sudo timedatectl set-timezone 'Asia/Shanghai'
-        git config --global user.name 'actions'
-        git config --global user.email 'action@github.com'
-        echo build_dir="/builder" >> "$GITHUB_ENV"
-        [ "${{ github.event.inputs.version }}" = release ] && echo build_version="rc2" >> "$GITHUB_ENV" || echo build_version="dev" >> "$GITHUB_ENV"
+      - name: Setup variables
+        run: |
+          sudo timedatectl set-timezone 'Asia/Shanghai'
 
-    - name: Show system
-      run: |
-        echo -e "\n\e[1;32mCPU:\e[0m"
-        echo "$(grep 'model name' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}') ($(grep 'cpu MHz' /proc/cpuinfo | head -1 | awk -F ': ' '{print $2}')MHz) x $(grep processor /proc/cpuinfo  | wc -l)"
-        echo -e "\n\e[1;32mMemory:\e[0m"
-        free -h
-        echo -e "\n\e[1;32mStorage:\e[0m"
-        df -Th / /mnt
-        echo -e "\n\e[1;32mSystem:\e[0m"
-        lsb_release -a
-        echo -e "\n\e[1;32mKernel:\e[0m"
-        uname -a
-        echo
+          git config --global user.name 'actions'
+          git config --global user.email 'action@github.com'
 
-    - name: Install Caddy Server
-      run: |
-        sudo curl -sL -o /usr/bin/caddy https://github.com/sbwml/r4s_build_script/releases/download/caddy/caddy
-        sudo chmod 755 /usr/bin/caddy
-        echo ":8080 {" > caddyfile
-        echo "    root * $(pwd)/r4s_build_script" >> caddyfile
-        echo "    file_server browse" >> caddyfile
-        echo "}" >> caddyfile
-        sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
+          echo "build_dir=${BUILD_DIR}" >> "$GITHUB_ENV"
 
-    - name: Free disk space
-      uses: sbwml/actions@free-disk
-      with:
-        build-mount-path: /builder
+          if [ "${{ inputs.version }}" = "release" ]; then
+            echo "build_version=rc2" >> "$GITHUB_ENV"
+          else
+            echo "build_version=dev" >> "$GITHUB_ENV"
+          fi
 
-    - name: Build System Setup
-      uses: sbwml/actions@openwrt-build-setup
+      - name: Show system
+        run: |
+          echo "CPU:"
+          lscpu | sed -n '1,20p' || true
 
-    - name: Install LLVM
-      uses: sbwml/actions@install-llvm
+          echo
+          echo "Memory:"
+          free -h
 
-    - name: Restore Cached
-      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device != 'armv8' && github.event.inputs.device != 'nanopi-r4s' }}
-      uses: actions/cache/restore@main
-      with:
-        path: /builder/.ccache
-        key: openwrt-25.12-${{ github.event.inputs.device }}-ccache
+          echo
+          echo "Storage:"
+          df -hT / /mnt || true
 
-    - name: Restore Cached (releases)
-      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
-      continue-on-error: true
-      working-directory: /builder
-      run: |
-        curl -s https://api.github.com/repos/${{ github.repository }}/releases | grep 'browser_download_url' | grep ccache | grep ${{ github.event.inputs.device }} | awk -F '"' '{print $4}' | grep -v '^$' | xargs -n 1 wget -q
-        cat ${{ github.event.inputs.device }}.tar.* | tar -xf - || true
-        rm -rf ${{ github.event.inputs.device }}.tar.* || true
-        [ -d .ccache ] && cache_size=$(du -sb .ccache | awk '{print $1}') || cache_size=0
-        cache_size_mb=$(echo "scale=0; ${cache_size} / (1024 * 1024)" | bc)
-        echo "Cache Size: ~${cache_size_mb} MB (${cache_size} B)"
-        echo "Cache restored successfully"
-        echo "Cache restored from key: ${{ github.event.inputs.device }}"
+          echo
+          echo "System:"
+          lsb_release -a || true
+          uname -a
 
-    - name: Compile OpenWrt
-      working-directory: /builder
-      id: compile
-      continue-on-error: true
-      env:
-        git_name: grandway2025
-        git_password: ${{ secrets.CLONE_TOKEN }}
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
-      run: |
-        export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_GCC15=y
-        export mihomo_core="${{ github.event.inputs.mihomo_core }}"
-        [ ${{ github.event.inputs.ccache }} = 'true' ] && export ENABLE_CCACHE=y
-        [ -n ${{ github.event.inputs.root_password }} ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
-        bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ env.build_version }} ${{ github.event.inputs.device }}
-        cd openwrt
-        if [ "${{ github.event.inputs.version }}" = release ]; then
-          tags=OpenWrt-$(git describe --abbrev=0 --tags)
-        else
-          tags=snapshot-25.12-$(git log -n 1 --date=format:"%Y%m%d" --format="%cd")-$(git log --pretty=format:"%h" -1)
-        fi
-        echo "latest_release=$tags" >>$GITHUB_ENV
+      - name: Install Caddy Server
+        run: |
+          sudo curl -fsSL -o /usr/bin/caddy https://github.com/sbwml/r4s_build_script/releases/download/caddy/caddy
+          sudo chmod 755 /usr/bin/caddy
 
-    - name: Extensive logs after a failed compilation
-      working-directory: /builder
-      if: steps.compile.outcome == 'failure'
-      run: |
-        cd openwrt
-        make V=s
+          cat > caddyfile <<EOF
+          :8080 {
+              root * ${SCRIPT_DIR}
+              file_server browse
+          }
+          EOF
 
-    - name: Delete Cached
-      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device != 'armv8' && github.event.inputs.device != 'nanopi-r4s' }}
-      continue-on-error: true
-      working-directory: /builder
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GH_REPO: ${{ github.repository }}
-      run: |
-        gh cache delete openwrt-25.12-${{ github.event.inputs.device }}-ccache || true
+          sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
 
-    - name: Save Cached
-      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device != 'armv8' && github.event.inputs.device != 'nanopi-r4s' }}
-      continue-on-error: true
-      uses: actions/cache/save@main
-      with:
-        path: /builder/.ccache
-        key: openwrt-25.12-${{ github.event.inputs.device }}-ccache
+      - name: Free disk space
+        uses: sbwml/actions@free-disk
+        with:
+          build-mount-path: ${{ env.BUILD_DIR }}
 
-    - name: Create ccache tar files
-      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
-      continue-on-error: true
-      working-directory: /builder
-      run: |
-        mkdir -p ccache
-        tar cf - .ccache | split -d -b 1800m - ccache/${{ github.event.inputs.device }}.tar.
+      - name: Build System Setup
+        uses: sbwml/actions@openwrt-build-setup
 
-    - name: Generate ccache release info
-      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
-      working-directory: /builder
-      run: bash $GITHUB_WORKSPACE/r4s_build_script/scripts/gen-release-info.sh
-      env:
-        RELEASE_TAG:  ccache-${{ github.event.inputs.device }}
-        DEVICE:       ${{ github.event.inputs.device }}
-        INFO_MODE:    minimal
-        OUTPUT_FILE:  /builder/info/ccache-info.md
-        
-    - name: Upload Cached (releases - ccache)
-      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
-      continue-on-error: true
-      uses: ncipollo/release-action@main
-      with:
-        name: ccache
-        bodyFile: /builder/info/ccache-info.md   # ← 新增
-        allowUpdates: true
-        tag: ccache
-        commit: master
-        replacesArtifacts: true
-        prerelease: true
-        token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: |
-          ${{ env.build_dir }}/ccache/*
+      - name: Install LLVM
+        uses: sbwml/actions@install-llvm
 
-    - name: Prepare Firmware Files
-      working-directory: /builder
-      run: |
-        mkdir -p rom info
-        if [[ "${{ github.event.inputs.device }}" == nanopi-* ]]; then
-          cp -a openwrt/bin/targets/rockchip/*/*.img.gz rom/
-          cp -a openwrt/bin/targets/rockchip/*/*.manifest info/manifest.txt
-          cp -a openwrt/bin/targets/rockchip/*/config.buildinfo info/config.buildinfo
-          cd rom && sha256sum *gz > ../info/sha256sums.txt
-        elif [ "${{ github.event.inputs.device }}" = "x86_64" ]; then
-          cp -a openwrt/bin/targets/x86/*/*-ext4-combined-efi.img.gz rom/
-          cp -a openwrt/bin/targets/x86/*/*-squashfs-combined-efi.img.gz rom/
-          cp -a openwrt/bin/targets/x86/*/*-generic-rootfs.tar.gz rom/
-          cp -a openwrt/bin/targets/x86/*/*-x86-64-generic.manifest info/manifest.txt
-          cp -a openwrt/bin/targets/x86/*/config.buildinfo info/config.buildinfo
-          cd rom && sha256sum *gz > ../info/sha256sums.txt
-        elif [ "${{ github.event.inputs.device }}" = "armv8" ]; then
-          tar zcf rom/u-boot-qemu_armv8.tar.gz -C openwrt/bin/targets/armsr/armv8*/ ./u-boot-qemu_armv8
-          cp -a openwrt/bin/targets/armsr/armv8*/*-generic-initramfs-kernel.bin rom/
-          cp -a openwrt/bin/targets/armsr/armv8*/*-generic-kernel.bin rom/
-          cp -a openwrt/bin/targets/armsr/armv8*/*-generic-ext4-combined-efi.img.gz rom/
-          cp -a openwrt/bin/targets/armsr/armv8*/*-generic-squashfs-combined-efi.img.gz rom/
-          cp -a openwrt/bin/targets/armsr/armv8*/*-rootfs.tar.gz rom/
-          cp -a openwrt/bin/targets/armsr/armv8*/*.manifest info/manifest.txt
-          cp -a openwrt/bin/targets/armsr/armv8*/config.buildinfo info/config.buildinfo
-          cd rom && sha256sum * > ../info/sha256sums.txt
-        fi
+      # 普通设备使用 GitHub Actions cache
+      - name: Restore ccache
+        if: ${{ inputs.ccache && !(inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        uses: actions/cache/restore@v4
+        with:
+          path: /builder/.ccache
+          key: ${{ env.CACHE_KEY }}
 
-    - name: Generate release info
-      working-directory: /builder
-      run: bash $GITHUB_WORKSPACE/r4s_build_script/scripts/gen-release-info.sh
-      env:
-        RELEASE_TAG:    ${{ env.latest_release }}
-        DEVICE:         ${{ github.event.inputs.device }}
-        LAN_ADDR:       ${{ env.lan }}
-        ROOT_PASSWORD:  ${{ env.password }}
-        KERNEL_VERSION: ${{ env.kernel }}
-        GCC_VERSION:    ${{ github.event.inputs.gcc }}
-        WEB_SERVER:     ${{ github.event.inputs.nginx == 'true' && 'nginx' || 'uhttpd' }}
-        MIHOMO_CORE:    ${{ github.event.inputs.mihomo }}
-        DOCKER:         ${{ github.event.inputs.docker }}
-        BUILD_OPTIONS:  ${{ env.build_options }}
-        MANIFEST_FILE:  /builder/openwrt/bin/targets/x86/64/openwrt-x86-64.manifest
-        OUTPUT_FILE:    /builder/info/info.md
-        INFO_MODE:      ${{ github.event.inputs.info_mode || 'curated' }}
-        
-    - name: Upload artifacts
-      uses: actions/upload-artifact@main
-      with:
-        name: ${{ github.event.inputs.device }}-openwrt-${{ env.latest_release }}
-        path: ${{ env.build_dir }}/rom/*
+      # armv8 / nanopi-r4s 使用 release 资产保存 ccache
+      - name: Restore ccache from release
+        if: ${{ inputs.ccache && (inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        continue-on-error: true
+        working-directory: /builder
+        run: |
+          curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases \
+            | grep 'browser_download_url' \
+            | grep ccache \
+            | grep '${{ inputs.device }}' \
+            | awk -F '"' '{print $4}' \
+            | grep -v '^$' \
+            | xargs -r -n 1 wget -q
 
-    - name: Create release
-      continue-on-error: true
-      uses: ncipollo/release-action@main
-      with:
-        name: ${{ env.latest_release }}
-        allowUpdates: true
-        tag: ${{ env.latest_release }}
-        commit: ${{ github.ref_name }}
-        bodyFile: /builder/info/info.md          # ← 新增这行
-        replacesArtifacts: true
-        token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: ${{ env.build_dir }}/rom/*
+          if ls ${{ inputs.device }}.tar.* >/dev/null 2>&1; then
+            cat ${{ inputs.device }}.tar.* | tar -xf - || true
+            rm -f ${{ inputs.device }}.tar.* || true
+          fi
+
+          if [ -d .ccache ]; then
+            cache_size=$(du -sb .ccache | awk '{print $1}')
+          else
+            cache_size=0
+          fi
+
+          cache_size_mb=$(( cache_size / 1024 / 1024 ))
+          echo "Cache Size: ~${cache_size_mb} MB (${cache_size} B)"
+
+      - name: Compile OpenWrt
+        id: compile
+        continue-on-error: true
+        working-directory: /builder
+        env:
+          git_name: grandway2025
+          git_password: ${{ secrets.CLONE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          export ${{ inputs.build_options }}
+          export LAN="${{ inputs.lan_addr }}"
+          export USE_GCC15=y
+          export mihomo_core="${{ inputs.mihomo_core }}"
+
+          if [ "${{ inputs.ccache }}" = "true" ]; then
+            export ENABLE_CCACHE=y
+          fi
+
+          if [ -n "${{ inputs.root_password }}" ]; then
+            export ROOT_PASSWORD="${{ inputs.root_password }}"
+          fi
+
+          bash <(curl -fsSL http://127.0.0.1:8080/build.sh) "${{ env.build_version }}" "${{ inputs.device }}"
+
+          cd openwrt
+
+          if [ "${{ inputs.version }}" = "release" ]; then
+            tags="OpenWrt-$(git describe --abbrev=0 --tags)"
+          else
+            tags="snapshot-25.12-$(git log -n 1 --date=format:'%Y%m%d' --format='%cd')-$(git log --pretty=format:'%h' -1)"
+          fi
+
+          echo "latest_release=${tags}" >> "$GITHUB_ENV"
+
+      - name: Extensive logs after a failed compilation
+        if: steps.compile.outcome == 'failure'
+        working-directory: /builder/openwrt
+        run: |
+          make V=s
+
+      - name: Stop if compile failed
+        if: steps.compile.outcome == 'failure'
+        run: exit 1
+
+      - name: Delete old ccache
+        if: ${{ inputs.ccache && !(inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh cache delete "${CACHE_KEY}" || true
+
+      - name: Save ccache
+        if: ${{ inputs.ccache && !(inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /builder/.ccache
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Create ccache tar files
+        if: ${{ inputs.ccache && (inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        continue-on-error: true
+        working-directory: /builder
+        run: |
+          mkdir -p ccache
+
+          if [ -d .ccache ]; then
+            tar cf - .ccache | split -d -b 1800m - "ccache/${{ inputs.device }}.tar."
+            ls -lh ccache
+          else
+            echo "No .ccache directory found, skip ccache tar."
+          fi
+
+      - name: Generate ccache release info
+        if: ${{ inputs.ccache && (inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        working-directory: /builder
+        run: |
+          if [ ! -f "$RELEASE_INFO_SCRIPT" ]; then
+            echo "Release info script not found: $RELEASE_INFO_SCRIPT"
+            find "$GITHUB_WORKSPACE" -name "gen-release-info.sh" -type f || true
+            exit 1
+          fi
+
+          bash "$RELEASE_INFO_SCRIPT"
+        env:
+          RELEASE_TAG: ccache-${{ inputs.device }}
+          DEVICE: ${{ inputs.device }}
+          INFO_MODE: minimal
+          OUTPUT_FILE: /builder/info/ccache-info.md
+
+      - name: Upload ccache release
+        if: ${{ inputs.ccache && (inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        continue-on-error: true
+        uses: ncipollo/release-action@main
+        with:
+          name: ccache
+          tag: ccache
+          commit: ${{ github.ref_name }}
+          bodyFile: /builder/info/ccache-info.md
+          allowUpdates: true
+          replacesArtifacts: true
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: /builder/ccache/*
+
+      - name: Prepare Firmware Files
+        working-directory: /builder
+        run: |
+          mkdir -p rom info
+
+          case "${{ inputs.device }}" in
+            x86_64)
+              cp -a openwrt/bin/targets/x86/*/*-ext4-combined-efi.img.gz rom/ || true
+              cp -a openwrt/bin/targets/x86/*/*-squashfs-combined-efi.img.gz rom/ || true
+              cp -a openwrt/bin/targets/x86/*/*-generic-rootfs.tar.gz rom/ || true
+              cp -a openwrt/x86_64-*.tar.gz rom/ || true
+
+              cp -a openwrt/bin/targets/x86/*/*.manifest info/manifest.txt
+              cp -a openwrt/bin/targets/x86/*/config.buildinfo info/config.buildinfo
+              ;;
+
+            armv8)
+              tar zcf rom/u-boot-qemu_armv8.tar.gz -C openwrt/bin/targets/armsr/armv8*/ ./u-boot-qemu_armv8 || true
+              cp -a openwrt/bin/targets/armsr/armv8*/*-generic-initramfs-kernel.bin rom/ || true
+              cp -a openwrt/bin/targets/armsr/armv8*/*-generic-kernel.bin rom/ || true
+              cp -a openwrt/bin/targets/armsr/armv8*/*-generic-ext4-combined-efi.img.gz rom/ || true
+              cp -a openwrt/bin/targets/armsr/armv8*/*-generic-squashfs-combined-efi.img.gz rom/ || true
+              cp -a openwrt/bin/targets/armsr/armv8*/*-rootfs.tar.gz rom/ || true
+              cp -a openwrt/armv8-*.tar.gz rom/ || true
+
+              cp -a openwrt/bin/targets/armsr/armv8*/*.manifest info/manifest.txt
+              cp -a openwrt/bin/targets/armsr/armv8*/config.buildinfo info/config.buildinfo
+              ;;
+
+            nanopi-*)
+              cp -a openwrt/bin/targets/rockchip/*/*.img.gz rom/ || true
+              cp -a openwrt/aarch64-*.tar.gz rom/ || true
+
+              cp -a openwrt/bin/targets/rockchip/*/*.manifest info/manifest.txt
+              cp -a openwrt/bin/targets/rockchip/*/config.buildinfo info/config.buildinfo
+              ;;
+          esac
+
+          if [ ! -s info/manifest.txt ]; then
+            echo "manifest.txt not found or empty"
+            find openwrt/bin/targets -name "*.manifest" -type f || true
+            exit 1
+          fi
+
+          if [ ! "$(find rom -type f | wc -l)" -gt 0 ]; then
+            echo "No firmware files found in /builder/rom"
+            find openwrt/bin/targets -type f | sed -n '1,120p'
+            exit 1
+          fi
+
+          cd rom
+          sha256sum * > ../info/sha256sums.txt
+
+          echo "Prepared files:"
+          ls -lh /builder/rom
+          echo
+          echo "Manifest:"
+          ls -lh /builder/info/manifest.txt
+          echo
+          echo "SHA256:"
+          cat /builder/info/sha256sums.txt
+
+      - name: Generate release info
+        working-directory: /builder
+        run: |
+          if [ ! -f "$RELEASE_INFO_SCRIPT" ]; then
+            echo "Release info script not found: $RELEASE_INFO_SCRIPT"
+            find "$GITHUB_WORKSPACE" -name "gen-release-info.sh" -type f || true
+            exit 1
+          fi
+
+          if [ ! -f /builder/info/manifest.txt ]; then
+            echo "/builder/info/manifest.txt not found"
+            exit 1
+          fi
+
+          bash "$RELEASE_INFO_SCRIPT"
+        env:
+          RELEASE_TAG: ${{ env.latest_release }}
+          DEVICE: ${{ inputs.device }}
+          LAN_ADDR: ${{ inputs.lan_addr }}
+          ROOT_PASSWORD: ${{ inputs.root_password }}
+          KERNEL_VERSION: N/A
+          GCC_VERSION: GCC15
+          WEB_SERVER: nginx
+          MIHOMO_CORE: ${{ inputs.mihomo_core }}
+          DOCKER: auto
+          BUILD_OPTIONS: ${{ inputs.build_options }}
+          MANIFEST_FILE: /builder/info/manifest.txt
+          OUTPUT_FILE: /builder/info/info.md
+          INFO_MODE: ${{ inputs.info_mode }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.device }}-openwrt-${{ env.latest_release }}
+          path: /builder/rom/*
+
+      - name: Create release
+        uses: ncipollo/release-action@main
+        with:
+          name: ${{ env.latest_release }}
+          tag: ${{ env.latest_release }}
+          commit: ${{ github.ref_name }}
+          bodyFile: /builder/info/info.md
+          allowUpdates: true
+          replacesArtifacts: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: /builder/rom/*
