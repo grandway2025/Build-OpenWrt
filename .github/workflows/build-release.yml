@@ -24,30 +24,6 @@ on:
           - release
           - snapshot-25.12
 
-      gcc_version:
-        description: 'GCC version'
-        required: true
-        default: 'GCC15'
-        type: choice
-        options:
-          - GCC13
-          - GCC14
-          - GCC15
-
-      web_server:
-        description: 'Web server'
-        required: true
-        default: 'nginx'
-        type: choice
-        options:
-          - nginx
-          - uhttpd
-
-      docker:
-        description: 'Enable Docker'
-        type: boolean
-        default: false
-
       ccache:
         description: 'Enable ccache'
         type: boolean
@@ -94,6 +70,7 @@ jobs:
       SCRIPT_DIR: ${{ github.workspace }}/r4s_build_script
       RELEASE_INFO_SCRIPT: ${{ github.workspace }}/r4s_build_script/scripts/gen-release-info.sh
       CACHE_KEY: openwrt-25.12-${{ inputs.device }}-ccache
+      IS_RELEASE_CCACHE_DEVICE: ${{ inputs.device == 'armv8' || inputs.device == 'nanopi-r4s' }}
 
     steps:
       - name: Checkout
@@ -126,13 +103,38 @@ jobs:
           free -h
 
           echo
-          echo "Storage:"
-          df -hT / /mnt || true
+          echo "Storage before cleanup:"
+          df -hT / /home /mnt || true
 
           echo
           echo "System:"
           lsb_release -a || true
           uname -a
+
+      - name: Pre-clean runner disk
+        run: |
+          echo "Cleaning runner disk..."
+
+          sudo rm -rf /usr/share/dotnet || true
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /opt/hostedtoolcache/Python || true
+          sudo rm -rf /opt/hostedtoolcache/node || true
+          sudo rm -rf /opt/hostedtoolcache/go || true
+
+          sudo docker system prune -af --volumes || true
+
+          rm -rf ~/.cache || true
+          rm -rf ~/.npm || true
+          rm -rf ~/.cargo || true
+          rm -rf ~/.rustup || true
+          rm -rf ~/.local/share/Trash || true
+          rm -rf "$RUNNER_TEMP"/* || true
+
+          echo
+          echo "Storage after pre-clean:"
+          df -hT / /home /mnt || true
 
       - name: Install Caddy Server
         run: |
@@ -153,11 +155,26 @@ jobs:
         with:
           build-mount-path: ${{ env.BUILD_DIR }}
 
+      - name: Show disk after free-disk
+        run: |
+          echo "Storage after free-disk:"
+          df -hT / /home /mnt "$BUILD_DIR" || true
+
       - name: Build System Setup
         uses: sbwml/actions@openwrt-build-setup
 
       - name: Install LLVM
         uses: sbwml/actions@install-llvm
+
+      - name: Clean after setup
+        run: |
+          sudo apt-get clean || true
+          sudo rm -rf /var/lib/apt/lists/* || true
+          rm -rf ~/.cache || true
+          rm -rf "$RUNNER_TEMP"/* || true
+
+          echo "Storage after setup clean:"
+          df -hT / /home /mnt "$BUILD_DIR" || true
 
       - name: Restore ccache
         if: ${{ inputs.ccache && !(inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
@@ -193,6 +210,9 @@ jobs:
           cache_size_mb=$(( cache_size / 1024 / 1024 ))
           echo "Cache Size: ~${cache_size_mb} MB (${cache_size} B)"
 
+          echo
+          df -hT / /home /mnt /builder || true
+
       - name: Compile OpenWrt
         id: compile
         continue-on-error: true
@@ -202,32 +222,12 @@ jobs:
           git_password: ${{ secrets.CLONE_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -o pipefail
+
           export ${{ inputs.build_options }}
-
           export LAN="${{ inputs.lan_addr }}"
-          export GCC_VERSION="${{ inputs.gcc_version }}"
-          export web_server="${{ inputs.web_server }}"
+          export USE_GCC15=y
           export mihomo_core="${{ inputs.mihomo_core }}"
-
-          case "${{ inputs.gcc_version }}" in
-            GCC13)
-              export USE_GCC13=y
-              ;;
-            GCC14)
-              export USE_GCC14=y
-              ;;
-            GCC15)
-              export USE_GCC15=y
-              ;;
-          esac
-
-          if [ "${{ inputs.web_server }}" = "uhttpd" ]; then
-            export ENABLE_UHTTPD=y
-          fi
-
-          if [ "${{ inputs.docker }}" = "true" ]; then
-            export ENABLE_DOCKER=y
-          fi
 
           if [ "${{ inputs.ccache }}" = "true" ]; then
             export ENABLE_CCACHE=y
@@ -236,6 +236,17 @@ jobs:
           if [ -n "${{ inputs.root_password }}" ]; then
             export ROOT_PASSWORD="${{ inputs.root_password }}"
           fi
+
+          echo "Build env:"
+          echo "DEVICE=${{ inputs.device }}"
+          echo "VERSION=${{ inputs.version }}"
+          echo "BUILD_VERSION=${{ env.build_version }}"
+          echo "LAN=${{ inputs.lan_addr }}"
+          echo "MIHOMO_CORE=${{ inputs.mihomo_core }}"
+          echo "CCACHE=${{ inputs.ccache }}"
+          echo "BUILD_OPTIONS=${{ inputs.build_options }}"
+          echo
+          df -hT / /home /mnt /builder || true
 
           bash <(curl -fsSL http://127.0.0.1:8080/build.sh) "${{ env.build_version }}" "${{ inputs.device }}"
 
@@ -249,11 +260,41 @@ jobs:
 
           echo "latest_release=${tags}" >> "$GITHUB_ENV"
 
-      - name: Extensive logs after a failed compilation
+      - name: Limited logs after a failed compilation
         if: steps.compile.outcome == 'failure'
-        working-directory: /builder/openwrt
+        working-directory: /builder
         run: |
-          make V=s
+          echo "Compilation failed. Show limited diagnostics only."
+          echo
+          echo "Disk:"
+          df -hT / /home /mnt /builder || true
+
+          echo
+          echo "Top large directories in /builder:"
+          sudo du -xh /builder --max-depth=2 2>/dev/null | sort -h | tail -n 80 || true
+
+          echo
+          echo "Search package logs:"
+          if [ -d /builder/openwrt/logs ]; then
+            find /builder/openwrt/logs -type f | sort | tail -n 80 || true
+
+            echo
+            echo "Last package logs:"
+            find /builder/openwrt/logs -type f \
+              \( -iname '*libxml2*' -o -iname '*libnftnl*' -o -iname '*.txt' -o -iname '*.log' \) \
+              | sort \
+              | tail -n 20 \
+              | while read -r log; do
+                  echo
+                  echo "===== $log ====="
+                  tail -n 120 "$log" || true
+                done
+          else
+            echo "No /builder/openwrt/logs directory."
+          fi
+
+          echo
+          echo "Do not run make V=s here to avoid filling GitHub runner diagnostic logs."
 
       - name: Stop if compile failed
         if: steps.compile.outcome == 'failure'
@@ -307,8 +348,8 @@ jobs:
           LAN_ADDR: ${{ inputs.lan_addr }}
           ROOT_PASSWORD: ${{ inputs.root_password }}
           KERNEL_VERSION: auto
-          GCC_VERSION: ${{ inputs.gcc_version }}
-          WEB_SERVER: ${{ inputs.web_server }}
+          GCC_VERSION: GCC15
+          WEB_SERVER: nginx
           MIHOMO_CORE: ${{ inputs.mihomo_core }}
           DOCKER: auto
           BUILD_OPTIONS: ${{ inputs.build_options }}
@@ -446,8 +487,8 @@ jobs:
           ROOT_PASSWORD: ${{ inputs.root_password }}
 
           KERNEL_VERSION: auto
-          GCC_VERSION: ${{ inputs.gcc_version }}
-          WEB_SERVER: ${{ inputs.web_server }}
+          GCC_VERSION: GCC15
+          WEB_SERVER: nginx
           MIHOMO_CORE: ${{ inputs.mihomo_core }}
           DOCKER: auto
 
@@ -456,9 +497,6 @@ jobs:
           MANIFEST_FILE: /builder/info/manifest.txt
           CONFIG_BUILDINFO: /builder/info/config.buildinfo
           OUTPUT_FILE: /builder/info/info.md
-
-          # 配合新版 gen-release-info.sh：
-          # full / curated 均可；新版推荐 full
           INFO_MODE: full
 
       - name: Upload artifacts
