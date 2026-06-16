@@ -24,16 +24,29 @@ on:
           - release
           - snapshot-25.12
 
-      info_mode:
-        description: 'Release 信息展示模式'
+      gcc_version:
+        description: 'GCC version'
         required: true
-        default: 'curated'
+        default: 'GCC15'
         type: choice
         options:
-          - curated
-          - all
-          - both
-          - minimal
+          - GCC13
+          - GCC14
+          - GCC15
+
+      web_server:
+        description: 'Web server'
+        required: true
+        default: 'nginx'
+        type: choice
+        options:
+          - nginx
+          - uhttpd
+
+      docker:
+        description: 'Enable Docker'
+        type: boolean
+        default: false
 
       ccache:
         description: 'Enable ccache'
@@ -81,7 +94,6 @@ jobs:
       SCRIPT_DIR: ${{ github.workspace }}/r4s_build_script
       RELEASE_INFO_SCRIPT: ${{ github.workspace }}/r4s_build_script/scripts/gen-release-info.sh
       CACHE_KEY: openwrt-25.12-${{ inputs.device }}-ccache
-      IS_RELEASE_CCACHE_DEVICE: ${{ inputs.device == 'armv8' || inputs.device == 'nanopi-r4s' }}
 
     steps:
       - name: Checkout
@@ -107,7 +119,7 @@ jobs:
       - name: Show system
         run: |
           echo "CPU:"
-          lscpu | sed -n '1,20p' || true
+          lscpu | sed -n '1,25p' || true
 
           echo
           echo "Memory:"
@@ -147,7 +159,6 @@ jobs:
       - name: Install LLVM
         uses: sbwml/actions@install-llvm
 
-      # 普通设备使用 GitHub Actions cache
       - name: Restore ccache
         if: ${{ inputs.ccache && !(inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
         uses: actions/cache/restore@v4
@@ -155,7 +166,6 @@ jobs:
           path: /builder/.ccache
           key: ${{ env.CACHE_KEY }}
 
-      # armv8 / nanopi-r4s 使用 release 资产保存 ccache
       - name: Restore ccache from release
         if: ${{ inputs.ccache && (inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
         continue-on-error: true
@@ -193,9 +203,31 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           export ${{ inputs.build_options }}
+
           export LAN="${{ inputs.lan_addr }}"
-          export USE_GCC15=y
+          export GCC_VERSION="${{ inputs.gcc_version }}"
+          export web_server="${{ inputs.web_server }}"
           export mihomo_core="${{ inputs.mihomo_core }}"
+
+          case "${{ inputs.gcc_version }}" in
+            GCC13)
+              export USE_GCC13=y
+              ;;
+            GCC14)
+              export USE_GCC14=y
+              ;;
+            GCC15)
+              export USE_GCC15=y
+              ;;
+          esac
+
+          if [ "${{ inputs.web_server }}" = "uhttpd" ]; then
+            export ENABLE_UHTTPD=y
+          fi
+
+          if [ "${{ inputs.docker }}" = "true" ]; then
+            export ENABLE_DOCKER=y
+          fi
 
           if [ "${{ inputs.ccache }}" = "true" ]; then
             export ENABLE_CCACHE=y
@@ -272,8 +304,19 @@ jobs:
         env:
           RELEASE_TAG: ccache-${{ inputs.device }}
           DEVICE: ${{ inputs.device }}
-          INFO_MODE: minimal
+          LAN_ADDR: ${{ inputs.lan_addr }}
+          ROOT_PASSWORD: ${{ inputs.root_password }}
+          KERNEL_VERSION: auto
+          GCC_VERSION: ${{ inputs.gcc_version }}
+          WEB_SERVER: ${{ inputs.web_server }}
+          MIHOMO_CORE: ${{ inputs.mihomo_core }}
+          DOCKER: auto
+          BUILD_OPTIONS: ${{ inputs.build_options }}
+          OPENWRT_DIR: /builder/openwrt
+          MANIFEST_FILE: /builder/info/manifest.txt
+          CONFIG_BUILDINFO: /builder/info/config.buildinfo
           OUTPUT_FILE: /builder/info/ccache-info.md
+          INFO_MODE: minimal
 
       - name: Upload ccache release
         if: ${{ inputs.ccache && (inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
@@ -302,8 +345,8 @@ jobs:
               cp -a openwrt/bin/targets/x86/*/*-generic-rootfs.tar.gz rom/ || true
               cp -a openwrt/x86_64-*.tar.gz rom/ || true
 
-              cp -a openwrt/bin/targets/x86/*/*.manifest info/manifest.txt
-              cp -a openwrt/bin/targets/x86/*/config.buildinfo info/config.buildinfo
+              manifest_file="$(find openwrt/bin/targets/x86 -name "*.manifest" -type f | head -n 1 || true)"
+              config_file="$(find openwrt/bin/targets/x86 -name "config.buildinfo" -type f | head -n 1 || true)"
               ;;
 
             armv8)
@@ -315,18 +358,26 @@ jobs:
               cp -a openwrt/bin/targets/armsr/armv8*/*-rootfs.tar.gz rom/ || true
               cp -a openwrt/armv8-*.tar.gz rom/ || true
 
-              cp -a openwrt/bin/targets/armsr/armv8*/*.manifest info/manifest.txt
-              cp -a openwrt/bin/targets/armsr/armv8*/config.buildinfo info/config.buildinfo
+              manifest_file="$(find openwrt/bin/targets/armsr -name "*.manifest" -type f | head -n 1 || true)"
+              config_file="$(find openwrt/bin/targets/armsr -name "config.buildinfo" -type f | head -n 1 || true)"
               ;;
 
             nanopi-*)
               cp -a openwrt/bin/targets/rockchip/*/*.img.gz rom/ || true
               cp -a openwrt/aarch64-*.tar.gz rom/ || true
 
-              cp -a openwrt/bin/targets/rockchip/*/*.manifest info/manifest.txt
-              cp -a openwrt/bin/targets/rockchip/*/config.buildinfo info/config.buildinfo
+              manifest_file="$(find openwrt/bin/targets/rockchip -name "*.manifest" -type f | head -n 1 || true)"
+              config_file="$(find openwrt/bin/targets/rockchip -name "config.buildinfo" -type f | head -n 1 || true)"
               ;;
           esac
+
+          if [ -n "${manifest_file:-}" ] && [ -f "$manifest_file" ]; then
+            cp -a "$manifest_file" info/manifest.txt
+          fi
+
+          if [ -n "${config_file:-}" ] && [ -f "$config_file" ]; then
+            cp -a "$config_file" info/config.buildinfo
+          fi
 
           if [ ! -s info/manifest.txt ]; then
             echo "manifest.txt not found or empty"
@@ -336,7 +387,7 @@ jobs:
 
           if [ ! "$(find rom -type f | wc -l)" -gt 0 ]; then
             echo "No firmware files found in /builder/rom"
-            find openwrt/bin/targets -type f | sed -n '1,120p'
+            find openwrt/bin/targets -type f | sed -n '1,160p'
             exit 1
           fi
 
@@ -345,9 +396,15 @@ jobs:
 
           echo "Prepared files:"
           ls -lh /builder/rom
+
           echo
           echo "Manifest:"
           ls -lh /builder/info/manifest.txt
+
+          echo
+          echo "Config buildinfo:"
+          ls -lh /builder/info/config.buildinfo || true
+
           echo
           echo "SHA256:"
           cat /builder/info/sha256sums.txt
@@ -363,24 +420,46 @@ jobs:
 
           if [ ! -f /builder/info/manifest.txt ]; then
             echo "/builder/info/manifest.txt not found"
+            find /builder/openwrt/bin/targets -name "*.manifest" -type f || true
             exit 1
           fi
 
           bash "$RELEASE_INFO_SCRIPT"
+
+          TITLE_DATE="$(date '+%Y.%m.%d-%H%M')"
+          DEVICE_TITLE="$(echo "${{ inputs.device }}" | tr '[:lower:]' '[:upper:]')"
+          RELEASE_TITLE="${TITLE_DATE} • ${DEVICE_TITLE} • ${{ env.latest_release }}"
+
+          echo "release_title=${RELEASE_TITLE}" >> "$GITHUB_ENV"
+
+          echo
+          echo "Release title:"
+          echo "$RELEASE_TITLE"
+
+          echo
+          echo "Release body:"
+          cat /builder/info/info.md
         env:
           RELEASE_TAG: ${{ env.latest_release }}
           DEVICE: ${{ inputs.device }}
           LAN_ADDR: ${{ inputs.lan_addr }}
           ROOT_PASSWORD: ${{ inputs.root_password }}
-          KERNEL_VERSION: N/A
-          GCC_VERSION: GCC15
-          WEB_SERVER: nginx
+
+          KERNEL_VERSION: auto
+          GCC_VERSION: ${{ inputs.gcc_version }}
+          WEB_SERVER: ${{ inputs.web_server }}
           MIHOMO_CORE: ${{ inputs.mihomo_core }}
           DOCKER: auto
+
           BUILD_OPTIONS: ${{ inputs.build_options }}
+          OPENWRT_DIR: /builder/openwrt
           MANIFEST_FILE: /builder/info/manifest.txt
+          CONFIG_BUILDINFO: /builder/info/config.buildinfo
           OUTPUT_FILE: /builder/info/info.md
-          INFO_MODE: ${{ inputs.info_mode }}
+
+          # 配合新版 gen-release-info.sh：
+          # full / curated 均可；新版推荐 full
+          INFO_MODE: full
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -391,7 +470,7 @@ jobs:
       - name: Create release
         uses: ncipollo/release-action@main
         with:
-          name: ${{ env.latest_release }}
+          name: ${{ env.release_title }}
           tag: ${{ env.latest_release }}
           commit: ${{ github.ref_name }}
           bodyFile: /builder/info/info.md
