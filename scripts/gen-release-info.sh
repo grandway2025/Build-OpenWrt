@@ -1,63 +1,179 @@
 #!/bin/bash
 # ============================================================
 # OpenWrt Release Info Generator
-# 生成 GitHub Release 正文 Markdown
 #
 # 必需环境变量：
-#   RELEASE_TAG     版本号
-#   DEVICE          目标设备 (x86_64 / nanopi-r5s / armv8 ...)
+#   RELEASE_TAG
+#   DEVICE
 #
 # 可选环境变量：
-#   LAN_ADDR        默认 LAN
-#   ROOT_PASSWORD   默认 root 密码
-#   MANIFEST_FILE   固件 manifest 路径（用于检测插件）
-#   KERNEL_VERSION  内核版本
-#   GCC_VERSION     GCC 版本
-#   WEB_SERVER      nginx / uhttpd
-#   MIHOMO_CORE     meta / smart
-#   DOCKER          true / false
-#   BUILD_OPTIONS   原始构建选项串
-#   OUTPUT_FILE     输出 md 文件路径，默认 info/info.md
-#   INFO_MODE       curated(默认) | all | both | minimal
-#   CURATED_LIST    自定义精选插件列表文件（每行: 显示名|包名前缀）
+#   LAN_ADDR
+#   ROOT_PASSWORD
+#   MANIFEST_FILE
+#   CONFIG_BUILDINFO
+#   OPENWRT_DIR
+#   KERNEL_VERSION
+#   GCC_VERSION
+#   WEB_SERVER
+#   MIHOMO_CORE
+#   DOCKER
+#   BUILD_OPTIONS
+#   OUTPUT_FILE
+#   INFO_MODE: full | minimal
+#   CURATED_LIST
 # ============================================================
 
 set -e
 
 OUTPUT_FILE="${OUTPUT_FILE:-info/info.md}"
 MANIFEST_FILE="${MANIFEST_FILE:-info/manifest.txt}"
-INFO_MODE="${INFO_MODE:-curated}"
+CONFIG_BUILDINFO="${CONFIG_BUILDINFO:-info/config.buildinfo}"
+OPENWRT_DIR="${OPENWRT_DIR:-openwrt}"
+INFO_MODE="${INFO_MODE:-full}"
+
 mkdir -p "$(dirname "$OUTPUT_FILE")"
 
 BUILD_DATE="$(date '+%Y-%m-%d %H:%M:%S')"
+
 RELEASE_TAG="${RELEASE_TAG:-unknown}"
 DEVICE="${DEVICE:-unknown}"
 LAN_ADDR="${LAN_ADDR:-192.168.1.1}"
-ROOT_PASSWORD="${ROOT_PASSWORD:-password}"
-KERNEL_VERSION="${KERNEL_VERSION:-N/A}"
-GCC_VERSION="${GCC_VERSION:-N/A}"
-WEB_SERVER="${WEB_SERVER:-nginx}"
+ROOT_PASSWORD="${ROOT_PASSWORD:-}"
 MIHOMO_CORE="${MIHOMO_CORE:-meta}"
-DOCKER="${DOCKER:-false}"
 BUILD_OPTIONS="${BUILD_OPTIONS:-}"
 
-# ---------- 工具 ----------
+[ -z "$ROOT_PASSWORD" ] && ROOT_PASSWORD="无密码"
+
+# ============================================================
+# 自动检测函数
+# ============================================================
+
 has_pkg() {
-    local pattern="$1"
-    if [ -f "$MANIFEST_FILE" ] && grep -qE "^${pattern}( |$)" "$MANIFEST_FILE"; then
-        echo "✅ 已编译"
+    local pkg="$1"
+
+    [ -f "$MANIFEST_FILE" ] || return 1
+
+    awk '{print $1}' "$MANIFEST_FILE" | grep -qx "$pkg"
+}
+
+has_pkg_prefix() {
+    local prefix="$1"
+
+    [ -f "$MANIFEST_FILE" ] || return 1
+
+    awk '{print $1}' "$MANIFEST_FILE" | grep -Eq "^${prefix}($|-|_)"
+}
+
+detect_gcc_version() {
+    if [ -n "$GCC_VERSION" ] && [ "$GCC_VERSION" != "auto" ]; then
+        echo "$GCC_VERSION"
+        return
+    fi
+
+    if echo "$BUILD_OPTIONS" | grep -qw "USE_GCC13=y"; then
+        echo "GCC13"
+    elif echo "$BUILD_OPTIONS" | grep -qw "USE_GCC14=y"; then
+        echo "GCC14"
+    elif echo "$BUILD_OPTIONS" | grep -qw "USE_GCC15=y"; then
+        echo "GCC15"
+    elif echo "$BUILD_OPTIONS" | grep -qw "USE_GCC16=y"; then
+        echo "GCC16"
+    elif [ -f "$CONFIG_BUILDINFO" ] && grep -q "CONFIG_GCC_USE_VERSION_13=y" "$CONFIG_BUILDINFO"; then
+        echo "GCC13"
+    elif [ -f "$CONFIG_BUILDINFO" ] && grep -q "CONFIG_GCC_USE_VERSION_14=y" "$CONFIG_BUILDINFO"; then
+        echo "GCC14"
+    elif [ -f "$CONFIG_BUILDINFO" ] && grep -q "CONFIG_GCC_USE_VERSION_15=y" "$CONFIG_BUILDINFO"; then
+        echo "GCC15"
+    elif [ -f "$CONFIG_BUILDINFO" ] && grep -q "CONFIG_GCC_USE_VERSION_16=y" "$CONFIG_BUILDINFO"; then
+        echo "GCC16"
     else
-        echo "❌ 未编译"
+        echo "GCC15"
     fi
 }
 
+detect_web_server() {
+    if [ -n "$WEB_SERVER" ] && [ "$WEB_SERVER" != "auto" ]; then
+        echo "$WEB_SERVER"
+        return
+    fi
+
+    if echo "$BUILD_OPTIONS" | grep -qw "ENABLE_UHTTPD=y"; then
+        echo "uhttpd"
+    elif [ -f "$MANIFEST_FILE" ] && has_pkg "uhttpd"; then
+        echo "uhttpd"
+    else
+        echo "nginx"
+    fi
+}
+
+detect_docker() {
+    if [ -n "$DOCKER" ] && [ "$DOCKER" != "auto" ]; then
+        echo "$DOCKER"
+        return
+    fi
+
+    if has_pkg "dockerd" || has_pkg "docker" || has_pkg "luci-app-dockerman"; then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
+detect_kernel_version() {
+    if [ -n "$KERNEL_VERSION" ] && [ "$KERNEL_VERSION" != "auto" ]; then
+        echo "$KERNEL_VERSION"
+        return
+    fi
+
+    # 优先从 kmod 压缩包名称里提取
+    # 例如：
+    # x86_64-6.6.104~xxxx-r1.tar.gz
+    # armv8-6.6.104~xxxx-r1.tar.gz
+    # aarch64-6.6.104~xxxx-r1.tar.gz
+    local kmod_file
+    kmod_file="$(find "$OPENWRT_DIR" -maxdepth 1 -type f -name "*.tar.gz" 2>/dev/null | head -n 1 || true)"
+
+    if [ -n "$kmod_file" ]; then
+        basename "$kmod_file" \
+            | sed -E 's/^(x86_64|armv8|aarch64)-//' \
+            | sed -E 's/\.tar\.gz$//'
+        return
+    fi
+
+    # 其次尝试从 config.buildinfo 读取 kernel patchver
+    if [ -f "$CONFIG_BUILDINFO" ]; then
+        local patchver
+        patchver="$(grep -E '^CONFIG_KERNEL_PATCHVER=' "$CONFIG_BUILDINFO" | head -n1 | cut -d '"' -f2 || true)"
+        if [ -n "$patchver" ]; then
+            echo "$patchver"
+            return
+        fi
+    fi
+
+    echo "N/A"
+}
+
+GCC_VERSION="$(detect_gcc_version)"
+WEB_SERVER="$(detect_web_server)"
+DOCKER="$(detect_docker)"
+KERNEL_VERSION="$(detect_kernel_version)"
+
+# ============================================================
+# 精选插件列表
+# 格式：
+# 显示名称|包名
+# 只显示 manifest 中实际存在的插件
+# ============================================================
+
 default_curated_list() {
     cat <<'LIST'
-Docker (dockerd)|dockerd
+Docker|dockerd
+Docker 管理|luci-app-dockerman
 ShadowSocksR Plus+|luci-app-ssr-plus
 PassWall|luci-app-passwall
+PassWall2|luci-app-passwall2
 OpenClash|luci-app-openclash
-Mihomo (Nikki)|luci-app-nikki
+Mihomo Nikki|luci-app-nikki
 MosDNS|luci-app-mosdns
 AdGuardHome|luci-app-adguardhome
 SmartDNS|luci-app-smartdns
@@ -72,29 +188,41 @@ DDNS|luci-app-ddns
 应用过滤|luci-app-appfilter
 ZeroTier|luci-app-zerotier
 TailScale|luci-app-tailscale
+iStore 商店|luci-app-store
+QuickStart|luci-app-quickstart
+TTYD 终端|luci-app-ttyd
+Samba4|luci-app-samba4
+QoS Nftables|luci-app-qos-nft
+SQM QoS|luci-app-sqm
+Argon 主题|luci-theme-argon
 LIST
 }
 
-# ---------- 区块渲染 ----------
+# ============================================================
+# 渲染区块
+# ============================================================
+
 render_header() {
-    echo "# 🎉 OpenWrt 固件发布"
-    echo ""
+    cat <<EOF
+# 🎉 OpenWrt 固件发布
+
+EOF
 }
 
-render_build_info_full() {
+render_build_info() {
     cat <<EOF
 ## 📊 构建信息
 
 | 项目 | 值 |
 |------|----|
 | 🏷️ 版本 | \`${RELEASE_TAG}\` |
-| 📅 编译时间 | ${BUILD_DATE} |
-| 🎯 目标设备 | ${DEVICE} |
-| 🐧 内核版本 | ${KERNEL_VERSION} |
-| 🛠️ GCC 版本 | ${GCC_VERSION} |
-| 🌐 Web 服务 | ${WEB_SERVER} |
-| 🐳 Docker | ${DOCKER} |
-| 🐱 Mihomo 内核 | ${MIHOMO_CORE} |
+| 📅 编译时间 | \`${BUILD_DATE}\` |
+| 🎯 目标设备 | \`${DEVICE}\` |
+| 🐧 内核版本 | \`${KERNEL_VERSION}\` |
+| 🛠️ GCC 版本 | \`${GCC_VERSION}\` |
+| 🌐 Web 服务 | \`${WEB_SERVER}\` |
+| 🐳 Docker | \`${DOCKER}\` |
+| 🐱 Mihomo 内核 | \`${MIHOMO_CORE}\` |
 | 🌍 默认 LAN | \`${LAN_ADDR}\` |
 | 🔑 默认密码 | \`${ROOT_PASSWORD}\` |
 
@@ -108,14 +236,15 @@ render_build_info_minimal() {
 | 项目 | 值 |
 |------|----|
 | 🏷️ 版本 | \`${RELEASE_TAG}\` |
-| 📅 编译时间 | ${BUILD_DATE} |
-| 🎯 目标设备 | ${DEVICE} |
+| 📅 编译时间 | \`${BUILD_DATE}\` |
+| 🎯 目标设备 | \`${DEVICE}\` |
 
 EOF
 }
 
 render_build_options() {
     [ -z "$BUILD_OPTIONS" ] && return
+
     cat <<EOF
 ## ⚙️ 构建选项
 
@@ -126,88 +255,88 @@ ${BUILD_OPTIONS}
 EOF
 }
 
-render_curated() {
-    echo "## 📦 已编译插件（精选）"
-    echo ""
-    echo "| 插件 | 状态 |"
-    echo "|------|------|"
+render_curated_compiled_only() {
+    [ -f "$MANIFEST_FILE" ] || return
+
+    local tmp_file
+    tmp_file="$(mktemp)"
+
     if [ -n "$CURATED_LIST" ] && [ -f "$CURATED_LIST" ]; then
-        cat "$CURATED_LIST"
+        list_file="$CURATED_LIST"
+        while IFS='|' read -r name pkg; do
+            [ -z "$name" ] && continue
+            [ -z "$pkg" ] && continue
+
+            if has_pkg "$pkg"; then
+                echo "| ${name} | ✅ 已编译 |" >> "$tmp_file"
+            fi
+        done < "$list_file"
     else
-        default_curated_list
-    fi | while IFS='|' read -r name pkg; do
-        [ -z "$name" ] && continue
-        echo "| ${name} | $(has_pkg "$pkg") |"
-    done
-    echo ""
-}
+        default_curated_list | while IFS='|' read -r name pkg; do
+            [ -z "$name" ] && continue
+            [ -z "$pkg" ] && continue
 
-render_all_luci() {
-    echo "## 📚 已编译 LuCI 应用（全量）"
-    echo ""
-    if [ ! -f "$MANIFEST_FILE" ]; then
-        echo "_未找到 manifest 文件，无法列出_"
-        echo ""
-        return
+            if has_pkg "$pkg"; then
+                echo "| ${name} | ✅ 已编译 |" >> "$tmp_file"
+            fi
+        done
     fi
-    local count
-    count=$(grep -cE '^luci-app-' "$MANIFEST_FILE" || true)
-    echo "> 共 **${count}** 个 LuCI 应用"
-    echo ""
-    echo "| 插件 | 版本 |"
-    echo "|------|------|"
-    awk '/^luci-app-/ {print "| " $1 " | " $3 " |"}' "$MANIFEST_FILE"
-    echo ""
+
+    if [ -s "$tmp_file" ]; then
+        cat <<EOF
+## 📦 已编译插件
+
+| 插件 | 状态 |
+|------|------|
+EOF
+        cat "$tmp_file"
+        echo
+    fi
+
+    rm -f "$tmp_file"
 }
 
-render_footer_full() {
+render_footer() {
     cat <<'EOF'
 ## 📝 校验信息
-> 每个固件文件的 SHA256 见上方 Assets 列表右侧（GitHub 自带校验）
+
+> 固件 SHA256 校验信息见 Release Assets。
+
 ---
-> 💡 刷机有风险，请确保固件完整性后再刷入设备
+
+> 💡 刷机有风险，请确认固件与设备型号匹配后再操作。
 EOF
 }
 
 render_footer_minimal() {
     cat <<'EOF'
 ---
-> SHA256 校验见 Assets 列表右侧
+> SHA256 校验见 Release Assets。
 EOF
 }
 
-# ---------- 组装 ----------
-{
-render_header
+# ============================================================
+# 组装
+# ============================================================
 
-case "$INFO_MODE" in
-    minimal)
-        render_build_info_minimal
-        render_footer_minimal
-        ;;
-    all)
-        render_build_info_full
-        render_build_options
-        render_all_luci
-        render_footer_full
-        ;;
-    both)
-        render_build_info_full
-        render_build_options
-        render_curated
-        render_all_luci
-        render_footer_full
-        ;;
-    curated|*)
-        render_build_info_full
-        render_build_options
-        render_curated
-        render_footer_full
-        ;;
-esac
+{
+    render_header
+
+    case "$INFO_MODE" in
+        minimal)
+            render_build_info_minimal
+            render_footer_minimal
+            ;;
+        full|curated|*)
+            render_build_info
+            render_build_options
+            render_curated_compiled_only
+            render_footer
+            ;;
+    esac
 } > "$OUTPUT_FILE"
 
-echo "✅ Release info generated [mode=${INFO_MODE}]: $OUTPUT_FILE"
+echo "✅ Release info generated: $OUTPUT_FILE"
 echo "----------------------------------------"
 cat "$OUTPUT_FILE"
 echo "----------------------------------------"
