@@ -210,7 +210,7 @@ jobs:
           echo "Start remote build script:"
           echo "bash <(curl -sS http://127.0.0.1:8080/build.sh) ${build_version} ${DEVICE}"
 
-          bash <(curl -sS http://127.0.0.1:8080/build.sh) "${build_version}" "${DEVICE}"
+          bash /builder/build.sh "${build_version}" "${DEVICE}"
 
           cd openwrt
 
