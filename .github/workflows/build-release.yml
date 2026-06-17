@@ -15,17 +15,20 @@ on:
           - armv8
           - nanopi-r4s
           - nanopi-r5s
+          - nanopi-r6s
           - nanopi-r76s
 
       version:
         description: "OpenWrt 版本"
         required: true
-        default: 'release'
-        type: choice
-        options:
-          - 'release'
-          - 'snapshot-25.12'
+        default: "release"
+        type: string
 
+      ccache:
+        description: 'Enable ccache (Use Cache to speed up next build)'
+        type: boolean
+        default: false
+        
       lan_addr:
         description: "默认 LAN 地址"
         required: true
@@ -38,11 +41,6 @@ on:
         default: ""
         type: string
 
-      ccache:
-        description: 'Enable ccache (Use Cache to speed up next build)'
-        type: boolean
-        default: false
-        
       mihomo_core:
         description: "Mihomo 内核"
         required: true
@@ -62,16 +60,18 @@ permissions:
   contents: write
   actions: read
 
+# 防止同一设备、同一版本并发构建和上传 Release
 concurrency:
   group: build-release-${{ github.workflow }}-${{ inputs.device }}-${{ inputs.version }}
   cancel-in-progress: false
 
 env:
+  TZ: Asia/Shanghai
+
   # 提前启用 Node.js 24，减少 Node.js 20 deprecated 警告
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-  TZ: Asia/Shanghai
-
+  WORK_DIR: /builder
   ROM_DIR: /builder/rom
   INFO_DIR: /builder/info
 
@@ -96,12 +96,22 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "Device: ${DEVICE}"
-          echo "Version: ${OPENWRT_VERSION}"
-          echo "LAN: ${LAN_ADDR}"
-          echo "Mihomo: ${MIHOMO_CORE}"
-          echo "Build options: ${BUILD_OPTIONS}"
-          echo "Runner: $(uname -a)"
+          echo "============================================================"
+          echo "Build inputs"
+          echo "============================================================"
+          echo "DEVICE=${DEVICE}"
+          echo "OPENWRT_VERSION=${OPENWRT_VERSION}"
+          echo "LAN_ADDR=${LAN_ADDR}"
+          echo "MIHOMO_CORE=${MIHOMO_CORE}"
+          echo "BUILD_OPTIONS=${BUILD_OPTIONS}"
+          echo
+          echo "GitHub repository: ${GITHUB_REPOSITORY}"
+          echo "Git ref: ${GITHUB_REF}"
+          echo "Git sha: ${GITHUB_SHA}"
+          echo
+          echo "Runner:"
+          uname -a
+          echo
           echo "Disk:"
           df -hT
 
@@ -109,14 +119,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          sudo mkdir -p /builder
-          sudo chown -R "${USER}:${USER}" /builder
+          sudo mkdir -p "${WORK_DIR}" "${ROM_DIR}" "${INFO_DIR}"
+          sudo chown -R "${USER}:${USER}" "${WORK_DIR}"
 
           mkdir -p "${ROM_DIR}" "${INFO_DIR}"
 
-          echo "Workspace prepared:"
-          echo "  ROM_DIR=${ROM_DIR}"
-          echo "  INFO_DIR=${INFO_DIR}"
+          echo "WORK_DIR=${WORK_DIR}"
+          echo "ROM_DIR=${ROM_DIR}"
+          echo "INFO_DIR=${INFO_DIR}"
 
       - name: Free disk space
         run: |
@@ -134,10 +144,18 @@ jobs:
           echo "After cleanup:"
           df -hT
 
-      # =====================================================================
-      # 这里保留或替换成你的真实 OpenWrt 编译步骤
-      # 要求最后把固件文件放到 /builder/rom/
-      # =====================================================================
+      # ============================================================
+      # 关键步骤：
+      # 这里必须调用你仓库中真实存在的 OpenWrt 编译脚本。
+      #
+      # 推荐你在仓库中准备以下任意一个脚本：
+      #   scripts/build-openwrt.sh
+      #   scripts/build-release.sh
+      #   build-openwrt.sh
+      #   build.sh
+      #
+      # 如果你的旧 workflow 里已有真实编译命令，也可以直接替换本步骤。
+      # ============================================================
       - name: Build OpenWrt
         env:
           DEVICE: ${{ inputs.device }}
@@ -149,21 +167,176 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "请将这里替换成你现有的编译命令。"
-          echo "编译完成后，需要把固件文件复制到：${ROM_DIR}"
+          echo "============================================================"
+          echo "Start OpenWrt build"
+          echo "============================================================"
 
-          # 示例：
-          # bash scripts/build-openwrt.sh \
-          #   --device "${DEVICE}" \
-          #   --version "${OPENWRT_VERSION}" \
-          #   --lan "${LAN_ADDR}" \
-          #   --mihomo "${MIHOMO_CORE}" \
-          #   --options "${BUILD_OPTIONS}"
-          #
-          # cp -av bin/targets/*/*/* "${ROM_DIR}/"
+          echo "DEVICE=${DEVICE}"
+          echo "OPENWRT_VERSION=${OPENWRT_VERSION}"
+          echo "LAN_ADDR=${LAN_ADDR}"
+          echo "MIHOMO_CORE=${MIHOMO_CORE}"
+          echo "BUILD_OPTIONS=${BUILD_OPTIONS}"
 
-          if ! find "${ROM_DIR}" -maxdepth 1 -type f | grep -q .; then
-            echo "::error::${ROM_DIR} 中没有固件文件。请把 Build OpenWrt 步骤替换成你的真实编译命令。"
+          echo
+          echo "Repository files:"
+          find . -maxdepth 2 -type f | sort | sed 's#^\./##' | head -200
+
+          echo
+          echo "Detect build script..."
+
+          if [ -x "scripts/build-openwrt.sh" ]; then
+            echo "Use scripts/build-openwrt.sh"
+            scripts/build-openwrt.sh
+
+          elif [ -f "scripts/build-openwrt.sh" ]; then
+            echo "Use bash scripts/build-openwrt.sh"
+            bash scripts/build-openwrt.sh
+
+          elif [ -x "scripts/build-release.sh" ]; then
+            echo "Use scripts/build-release.sh"
+            scripts/build-release.sh
+
+          elif [ -f "scripts/build-release.sh" ]; then
+            echo "Use bash scripts/build-release.sh"
+            bash scripts/build-release.sh
+
+          elif [ -x "build-openwrt.sh" ]; then
+            echo "Use build-openwrt.sh"
+            ./build-openwrt.sh
+
+          elif [ -f "build-openwrt.sh" ]; then
+            echo "Use bash build-openwrt.sh"
+            bash build-openwrt.sh
+
+          elif [ -x "build.sh" ]; then
+            echo "Use build.sh"
+            ./build.sh
+
+          elif [ -f "build.sh" ]; then
+            echo "Use bash build.sh"
+            bash build.sh
+
+          else
+            echo "::error::No build script found."
+            echo
+            echo "Please provide one of these files:"
+            echo "  scripts/build-openwrt.sh"
+            echo "  scripts/build-release.sh"
+            echo "  build-openwrt.sh"
+            echo "  build.sh"
+            echo
+            echo "Or replace this Build OpenWrt step with your old working compile commands."
+            exit 1
+          fi
+
+          echo
+          echo "Build step finished."
+
+      - name: Collect firmware files
+        run: |
+          set -euo pipefail
+
+          echo "============================================================"
+          echo "Collect firmware files"
+          echo "============================================================"
+
+          mkdir -p "${ROM_DIR}"
+
+          echo "Search OpenWrt output directories..."
+
+          candidate_dirs=()
+
+          case "${DEVICE}" in
+            x86_64)
+              candidate_dirs+=(
+                "openwrt/bin/targets/x86/64"
+                "build/openwrt/bin/targets/x86/64"
+                "bin/targets/x86/64"
+              )
+              ;;
+
+            armv8)
+              candidate_dirs+=(
+                "openwrt/bin/targets/armsr/armv8"
+                "build/openwrt/bin/targets/armsr/armv8"
+                "bin/targets/armsr/armv8"
+              )
+              ;;
+
+            nanopi-r4s|nanopi-r5s|nanopi-r6s|nanopi-r76s)
+              candidate_dirs+=(
+                "openwrt/bin/targets/rockchip/armv8"
+                "build/openwrt/bin/targets/rockchip/armv8"
+                "bin/targets/rockchip/armv8"
+              )
+              ;;
+
+            *)
+              echo "::warning::Unknown device ${DEVICE}, use generic search."
+              ;;
+          esac
+
+          # 通用候选路径
+          candidate_dirs+=(
+            "openwrt/bin/targets"
+            "build/openwrt/bin/targets"
+            "bin/targets"
+            "${WORK_DIR}/openwrt/bin/targets"
+            "${WORK_DIR}/bin/targets"
+          )
+
+          echo "Candidate dirs:"
+          printf '  - %s\n' "${candidate_dirs[@]}"
+
+          copied=0
+
+          for dir in "${candidate_dirs[@]}"; do
+            if [ ! -d "${dir}" ]; then
+              continue
+            fi
+
+            echo
+            echo "Scan dir: ${dir}"
+
+            find "${dir}" -type f \
+              \( \
+                -name '*.img' -o \
+                -name '*.img.gz' -o \
+                -name '*.bin' -o \
+                -name '*.itb' -o \
+                -name '*.ubi' -o \
+                -name '*.iso' -o \
+                -name '*.vmdk' -o \
+                -name '*.vdi' -o \
+                -name '*.qcow2' -o \
+                -name '*.tar' -o \
+                -name '*.tar.gz' \
+              \) \
+              ! -name '*kernel*' \
+              ! -name '*rootfs*' \
+              -print0 | while IFS= read -r -d '' file; do
+                echo "Copy: ${file}"
+                cp -av "${file}" "${ROM_DIR}/"
+              done
+          done
+
+          echo
+          echo "Collected firmware files:"
+          find "${ROM_DIR}" -maxdepth 1 -type f -printf '%f\n' | sort || true
+
+          count="$(find "${ROM_DIR}" -maxdepth 1 -type f | wc -l)"
+          echo "Firmware count: ${count}"
+
+          if [ "${count}" -eq 0 ]; then
+            echo "::error::No firmware files collected into ${ROM_DIR}."
+            echo
+            echo "Please check:"
+            echo "1. Whether the OpenWrt build completed successfully."
+            echo "2. Whether firmware output exists under bin/targets/*/*/."
+            echo "3. Whether your build script used a custom output path."
+            echo
+            echo "Available directories:"
+            find . -maxdepth 5 -type d \( -name targets -o -name bin -o -name openwrt \) | sort || true
             exit 1
           fi
 
@@ -171,22 +344,36 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "============================================================"
+          echo "Normalize firmware files"
+          echo "============================================================"
+
           shopt -s nullglob
 
-          echo "Original firmware files:"
+          echo "Before normalization:"
           find "${ROM_DIR}" -maxdepth 1 -type f -printf '%f\n' | sort || true
 
-          # 删除无用临时文件
+          # 删除无关元数据文件，避免作为 Release Asset 上传
           find "${ROM_DIR}" -maxdepth 1 -type f \
-            \( -name '*.manifest' -o -name '*.buildinfo' -o -name '*.json' \) \
-            -print || true
+            \( \
+              -name '*.manifest' -o \
+              -name '*.buildinfo' -o \
+              -name '*.json' -o \
+              -name 'profiles.json' \
+            \) \
+            -print -delete || true
 
-          echo "Firmware files after normalization:"
+          echo
+          echo "After normalization:"
           find "${ROM_DIR}" -maxdepth 1 -type f -printf '%f\n' | sort || true
 
       - name: Check firmware assets
         run: |
           set -euo pipefail
+
+          echo "============================================================"
+          echo "Check firmware assets"
+          echo "============================================================"
 
           echo "Firmware files:"
           find "${ROM_DIR}" -maxdepth 1 -type f -printf '%f\n' | sort
@@ -200,7 +387,7 @@ jobs:
           fi
 
           echo
-          echo "File size:"
+          echo "File sizes:"
           ls -lh "${ROM_DIR}"
 
           echo
@@ -214,7 +401,7 @@ jobs:
 
           echo
           echo "Disk:"
-          df -hT / /home /builder || true
+          df -hT / /home "${WORK_DIR}" || true
 
       - name: Collect build metadata
         id: meta
@@ -228,7 +415,8 @@ jobs:
           device_upper="$(echo "${DEVICE}" | tr '[:lower:]' '[:upper:]')"
 
           # Release tag 不建议包含空格
-          release_tag="${OPENWRT_VERSION}-${DEVICE}-${tag_time}"
+          safe_version="$(echo "${OPENWRT_VERSION}" | tr ' /:@' '----')"
+          release_tag="${safe_version}-${DEVICE}-${tag_time}"
 
           # Release 标题可以更美观
           release_title="${tag_time} • ${device_upper} • ${OPENWRT_VERSION}"
@@ -244,6 +432,51 @@ jobs:
           echo "Release tag: ${release_tag}"
           echo "Release title: ${release_title}"
 
+      - name: Detect toolchain metadata
+        run: |
+          set -euo pipefail
+
+          echo "============================================================"
+          echo "Detect toolchain metadata"
+          echo "============================================================"
+
+          kernel_version="unknown"
+          gcc_version="GCC15"
+          web_server="nginx"
+          docker_enabled="true"
+
+          # 尝试从常见 OpenWrt 输出中提取内核版本
+          if find . -path '*/bin/targets/*/*/*.manifest' -type f | grep -q .; then
+            manifest="$(find . -path '*/bin/targets/*/*/*.manifest' -type f | head -n 1)"
+            echo "Manifest: ${manifest}"
+
+            detected_kernel="$(grep -E '^kernel - ' "${manifest}" | awk '{print $3}' | head -n 1 || true)"
+            if [ -n "${detected_kernel}" ]; then
+              kernel_version="${detected_kernel}"
+            fi
+          fi
+
+          # 尝试从 staging/toolchain 目录判断 GCC
+          if find . -type d -path '*staging_dir/toolchain-*gcc-15*' | grep -q .; then
+            gcc_version="GCC15"
+          elif find . -type d -path '*staging_dir/toolchain-*gcc-14*' | grep -q .; then
+            gcc_version="GCC14"
+          elif find . -type d -path '*staging_dir/toolchain-*gcc-13*' | grep -q .; then
+            gcc_version="GCC13"
+          elif find . -type d -path '*staging_dir/toolchain-*gcc-12*' | grep -q .; then
+            gcc_version="GCC12"
+          fi
+
+          echo "KERNEL_VERSION=${kernel_version}" >> "${GITHUB_ENV}"
+          echo "GCC_VERSION=${gcc_version}" >> "${GITHUB_ENV}"
+          echo "WEB_SERVER=${web_server}" >> "${GITHUB_ENV}"
+          echo "DOCKER=${docker_enabled}" >> "${GITHUB_ENV}"
+
+          echo "KERNEL_VERSION=${kernel_version}"
+          echo "GCC_VERSION=${gcc_version}"
+          echo "WEB_SERVER=${web_server}"
+          echo "DOCKER=${docker_enabled}"
+
       - name: Generate release info
         env:
           ROM_DIR: ${{ env.ROM_DIR }}
@@ -254,13 +487,11 @@ jobs:
           DEVICE: ${{ env.DEVICE }}
           TARGET: ${{ env.DEVICE }}
 
-          # 如果你的编译系统能拿到真实内核版本，可以在前面写入 GITHUB_ENV 覆盖
-          KERNEL_VERSION: ${{ env.KERNEL_VERSION || 'unknown' }}
+          KERNEL_VERSION: ${{ env.KERNEL_VERSION }}
+          GCC_VERSION: ${{ env.GCC_VERSION }}
+          WEB_SERVER: ${{ env.WEB_SERVER }}
+          DOCKER: ${{ env.DOCKER }}
 
-          # 如果你有真实变量，也可以覆盖
-          GCC_VERSION: ${{ env.GCC_VERSION || 'GCC15' }}
-          WEB_SERVER: ${{ env.WEB_SERVER || 'nginx' }}
-          DOCKER: ${{ env.DOCKER || 'true' }}
           MIHOMO_CORE: ${{ env.MIHOMO_CORE }}
           LAN_ADDR: ${{ env.LAN_ADDR }}
           ROOT_PASSWORD: ${{ env.ROOT_PASSWORD }}
@@ -275,13 +506,28 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "============================================================"
+          echo "Generate release info"
+          echo "============================================================"
+
+          if [ ! -f "scripts/gen-release-info.sh" ]; then
+            echo "::error::scripts/gen-release-info.sh not found."
+            exit 1
+          fi
+
           chmod +x scripts/gen-release-info.sh
           scripts/gen-release-info.sh
 
-          echo "Release info:"
-          sed -n '1,200p' "${INFO_DIR}/info.md"
+          echo
+          echo "Generated files:"
+          find "${INFO_DIR}" "${ROM_DIR}" -maxdepth 1 -type f -printf '%p\n' | sort
+
+          echo
+          echo "Release info preview:"
+          sed -n '1,220p' "${INFO_DIR}/info.md"
 
       - name: Append build summary
+        if: always()
         run: |
           set -euo pipefail
 
@@ -311,9 +557,13 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "============================================================"
+          echo "Delete duplicated release assets"
+          echo "============================================================"
+
           tag="${RELEASE_TAG}"
 
-          echo "Checking release: ${tag}"
+          echo "Release tag: ${tag}"
 
           if ! gh release view "${tag}" >/dev/null 2>&1; then
             echo "Release ${tag} does not exist yet, skip deleting assets."
@@ -333,10 +583,10 @@ jobs:
             gh release delete-asset "${tag}" "${name}" -y || true
           done
 
-          echo "Done deleting duplicated assets."
+          echo "Done."
 
       - name: Create or update GitHub release
-        uses: ncipollo/release-action@main
+        uses: ncipollo/release-action@v1
         with:
           tag: ${{ env.RELEASE_TAG }}
           name: ${{ env.RELEASE_TITLE }}
@@ -359,6 +609,10 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+
+          echo "============================================================"
+          echo "Verify release assets"
+          echo "============================================================"
 
           echo "Verify release: ${RELEASE_TAG}"
 
@@ -391,7 +645,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          echo "Current workflow artifacts:"
-          gh run view "${GITHUB_RUN_ID}" --json artifacts --jq '.artifacts[]? | [.name, .sizeInBytes, .expired] | @tsv' || true
+          echo "============================================================"
+          echo "Workflow artifacts"
+          echo "============================================================"
+
+          gh run view "${GITHUB_RUN_ID}" --json artifacts \
+            --jq '.artifacts[]? | [.name, .sizeInBytes, .expired] | @tsv' || true
 
           echo "Cleanup step finished."
