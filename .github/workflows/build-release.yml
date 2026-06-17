@@ -36,6 +36,15 @@ on:
         default: 'meta'
         type: choice
         options: ['meta', 'smart']
+      gcc_version:
+        description: 'GCC version'
+        required: true
+        default: 'GCC15'
+        type: choice
+        options:
+          - 'GCC14'
+          - 'GCC15'
+          - 'GCC16'
       root_password:
         description: 'Setting default root password (Optional, No password by default)'
         required: false
@@ -135,7 +144,7 @@ jobs:
         git_password: ${{ secrets.CLONE_TOKEN }}
         GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
       run: |
-        export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_GCC15=y
+        export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_${{ github.event.inputs.gcc_version }}=y
         export mihomo_core="${{ github.event.inputs.mihomo_core }}"
         [ ${{ github.event.inputs.ccache }} = 'true' ] && export ENABLE_CCACHE=y
         [ -n "${{ github.event.inputs.root_password }}" ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
@@ -234,6 +243,7 @@ jobs:
         WEB_SERVER: unknown
         DOCKER: auto
         MIHOMO_CORE: ${{ github.event.inputs.mihomo_core }}
+        GCC_VERSION: ${{ github.event.inputs.gcc_version }}
         LAN_ADDR: ${{ github.event.inputs.lan_addr }}
         ROOT_PASSWORD: ${{ github.event.inputs.root_password }}
         BUILD_OPTIONS: ${{ github.event.inputs.build_options }}
