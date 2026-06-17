@@ -20,8 +20,11 @@ on:
       version:
         description: "OpenWrt 版本"
         required: true
-        default: "OpenWrt-v25.12.4"
-        type: string
+        default: 'release'
+        type: choice
+        options:
+          - 'release'
+          - 'snapshot-25.12'
 
       lan_addr:
         description: "默认 LAN 地址"
@@ -35,6 +38,11 @@ on:
         default: ""
         type: string
 
+      ccache:
+        description: 'Enable ccache (Use Cache to speed up next build)'
+        type: boolean
+        default: false
+        
       mihomo_core:
         description: "Mihomo 内核"
         required: true
