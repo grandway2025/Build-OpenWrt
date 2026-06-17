@@ -1,529 +1,518 @@
 name: Build releases
 
-run-name: Build ${{ inputs.device }} • ${{ inputs.version }}
-
 on:
   workflow_dispatch:
     inputs:
       device:
-        description: "目标设备"
+        description: 'Select the build device'
         required: true
-        default: "x86_64"
+        default: 'x86_64'
         type: choice
         options:
-          - x86_64
           - armv8
           - nanopi-r4s
           - nanopi-r5s
-          - nanopi-r6s
           - nanopi-r76s
+          - x86_64
 
       version:
-        description: "版本类型"
+        description: 'Select the build version'
         required: true
-        default: "release"
+        default: 'release'
         type: choice
         options:
           - release
-          - snapshot
+          - snapshot-25.12
+
+      ccache:
+        description: 'Enable ccache'
+        type: boolean
+        default: false
 
       lan_addr:
-        description: "默认 LAN 地址"
+        description: 'Default LAN address'
         required: true
-        default: "192.168.1.10"
-        type: string
-
-      root_password:
-        description: "默认 root 密码，留空表示无密码"
-        required: false
-        default: ""
+        default: '192.168.1.10'
         type: string
 
       mihomo_core:
-        description: "Mihomo 内核"
+        description: 'Mihomo core type'
         required: true
-        default: "meta"
+        default: 'meta'
         type: choice
         options:
           - meta
           - smart
 
-      ccache:
-        description: "是否启用 ccache"
-        required: true
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
-
-      build_options:
-        description: "构建选项"
+      root_password:
+        description: 'Default root password, empty means no password'
         required: false
-        default: "BUILD_FAST=y ENABLE_BPF=y ENABLE_LTO=y ENABLE_LRNG=y ENABLE_MOLD=y KERNEL_CLANG_LTO=y"
+        default: ''
         type: string
 
-permissions:
-  contents: write
-  actions: read
-
-concurrency:
-  group: build-release-${{ github.workflow }}-${{ inputs.device }}-${{ inputs.version }}
-  cancel-in-progress: false
-
-env:
-  TZ: Asia/Shanghai
-
-  WORK_DIR: /builder
-  ROM_DIR: /builder/rom
-  INFO_DIR: /builder/info
-
-  DEVICE: ${{ inputs.device }}
-  build_version: ${{ inputs.version }}
-  RELEASE_VERSION: ${{ inputs.version }}
-  LAN_ADDR: ${{ inputs.lan_addr }}
-  ROOT_PASSWORD_INPUT: ${{ inputs.root_password }}
-  MIHOMO_CORE: ${{ inputs.mihomo_core }}
-  CCACHE_ENABLE: ${{ inputs.ccache }}
-  BUILD_OPTIONS: ${{ inputs.build_options }}
+      build_options:
+        description: 'Build options, separated by spaces'
+        required: false
+        default: 'BUILD_FAST=y ENABLE_BPF=y ENABLE_LTO=y ENABLE_LRNG=y ENABLE_MOLD=y KERNEL_CLANG_LTO=y'
+        type: string
 
 jobs:
   build:
     name: Build ${{ inputs.device }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 720
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      BUILD_DIR: /builder
+      SCRIPT_DIR: ${{ github.workspace }}/r4s_build_script
+      RELEASE_INFO_SCRIPT: ${{ github.workspace }}/r4s_build_script/scripts/gen-release-info.sh
+      CACHE_KEY: openwrt-25.12-${{ inputs.device }}-ccache
+      IS_RELEASE_CCACHE_DEVICE: ${{ inputs.device == 'armv8' || inputs.device == 'nanopi-r4s' }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          path: r4s_build_script
 
-      - name: Show build inputs
+      - name: Setup variables
         run: |
-          set -e
+          sudo timedatectl set-timezone 'Asia/Shanghai'
 
-          echo "============================================================"
-          echo "Build inputs"
-          echo "============================================================"
-          echo "DEVICE=${DEVICE}"
-          echo "build_version=${build_version}"
-          echo "RELEASE_VERSION=${RELEASE_VERSION}"
-          echo "LAN_ADDR=${LAN_ADDR}"
-          echo "MIHOMO_CORE=${MIHOMO_CORE}"
-          echo "CCACHE_ENABLE=${CCACHE_ENABLE}"
-          echo "BUILD_OPTIONS=${BUILD_OPTIONS}"
-          echo "GITHUB_REPOSITORY=${GITHUB_REPOSITORY}"
-          echo "GITHUB_REF=${GITHUB_REF}"
-          echo "GITHUB_REF_NAME=${GITHUB_REF_NAME}"
-          echo "GITHUB_SHA=${GITHUB_SHA}"
+          git config --global user.name 'actions'
+          git config --global user.email 'action@github.com'
+
+          echo "build_dir=${BUILD_DIR}" >> "$GITHUB_ENV"
+
+          if [ "${{ inputs.version }}" = "release" ]; then
+            echo "build_version=rc2" >> "$GITHUB_ENV"
+          else
+            echo "build_version=dev" >> "$GITHUB_ENV"
+          fi
+
+      - name: Show system
+        run: |
+          echo "CPU:"
+          lscpu | sed -n '1,25p' || true
 
           echo
-          echo "Runner:"
+          echo "Memory:"
+          free -h
+
+          echo
+          echo "Storage before cleanup:"
+          df -hT / /home /mnt || true
+
+          echo
+          echo "System:"
+          lsb_release -a || true
           uname -a
 
-          echo
-          echo "Disk:"
-          df -hT
-
-      - name: Prepare workspace
+      - name: Pre-clean runner disk
         run: |
-          set -e
-
-          sudo mkdir -p "${WORK_DIR}" "${ROM_DIR}" "${INFO_DIR}"
-          sudo chown -R "${USER}:${USER}" "${WORK_DIR}"
-
-          echo "WORK_DIR=${WORK_DIR}"
-          echo "ROM_DIR=${ROM_DIR}"
-          echo "INFO_DIR=${INFO_DIR}"
-
-      - name: Free disk space
-        run: |
-          set -e
-
-          echo "Before cleanup:"
-          df -hT
+          echo "Cleaning runner disk..."
 
           sudo rm -rf /usr/share/dotnet || true
           sudo rm -rf /usr/local/lib/android || true
           sudo rm -rf /opt/ghc || true
           sudo rm -rf /opt/hostedtoolcache/CodeQL || true
-          sudo docker image prune -af || true
+          sudo rm -rf /opt/hostedtoolcache/Python || true
+          sudo rm -rf /opt/hostedtoolcache/node || true
+          sudo rm -rf /opt/hostedtoolcache/go || true
 
-          echo "After cleanup:"
-          df -hT
+          sudo docker system prune -af --volumes || true
 
-      # 如果你的旧 workflow 里在此之前还有启动 127.0.0.1:8080 服务的步骤，
-      # 请保留在这个位置之前。
-      #
-      # 因为下面的编译命令依赖：
-      #   http://127.0.0.1:8080/build.sh
+          rm -rf ~/.cache || true
+          rm -rf ~/.npm || true
+          rm -rf ~/.cargo || true
+          rm -rf ~/.rustup || true
+          rm -rf ~/.local/share/Trash || true
+          rm -rf "$RUNNER_TEMP"/* || true
 
-      - name: Check local build script endpoint
+          echo
+          echo "Storage after pre-clean:"
+          df -hT / /home /mnt || true
+
+      - name: Install Caddy Server
         run: |
-          set -e
+          sudo curl -fsSL -o /usr/bin/caddy https://github.com/sbwml/r4s_build_script/releases/download/caddy/caddy
+          sudo chmod 755 /usr/bin/caddy
 
-          echo "============================================================"
-          echo "Check build.sh endpoint"
-          echo "============================================================"
+          cat > caddyfile <<EOF
+          :8080 {
+              root * ${SCRIPT_DIR}
+              file_server browse
+          }
+          EOF
 
-          if curl -fsSI http://127.0.0.1:8080/build.sh >/dev/null 2>&1; then
-            echo "build.sh endpoint is available."
-          else
-            echo "::warning::http://127.0.0.1:8080/build.sh is not available now."
-            echo "::warning::If your original workflow starts a local server before compile, please keep that step before Compile OpenWrt."
+          sudo /usr/bin/caddy start --config caddyfile --adapter caddyfile
+
+      - name: Free disk space
+        uses: sbwml/actions@free-disk
+        with:
+          build-mount-path: ${{ env.BUILD_DIR }}
+
+      - name: Show disk after free-disk
+        run: |
+          echo "Storage after free-disk:"
+          df -hT / /home /mnt "$BUILD_DIR" || true
+
+      - name: Build System Setup
+        uses: sbwml/actions@openwrt-build-setup
+
+      - name: Install LLVM
+        uses: sbwml/actions@install-llvm
+
+      - name: Clean after setup
+        run: |
+          sudo apt-get clean || true
+          sudo rm -rf /var/lib/apt/lists/* || true
+          rm -rf ~/.cache || true
+          rm -rf "$RUNNER_TEMP"/* || true
+
+          echo "Storage after setup clean:"
+          df -hT / /home /mnt "$BUILD_DIR" || true
+
+      - name: Restore ccache
+        if: ${{ inputs.ccache && !(inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        uses: actions/cache/restore@v4
+        with:
+          path: /builder/.ccache
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Restore ccache from release
+        if: ${{ inputs.ccache && (inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        continue-on-error: true
+        working-directory: /builder
+        run: |
+          curl -fsSL https://api.github.com/repos/${{ github.repository }}/releases \
+            | grep 'browser_download_url' \
+            | grep ccache \
+            | grep '${{ inputs.device }}' \
+            | awk -F '"' '{print $4}' \
+            | grep -v '^$' \
+            | xargs -r -n 1 wget -q
+
+          if ls ${{ inputs.device }}.tar.* >/dev/null 2>&1; then
+            cat ${{ inputs.device }}.tar.* | tar -xf - || true
+            rm -f ${{ inputs.device }}.tar.* || true
           fi
 
+          if [ -d .ccache ]; then
+            cache_size=$(du -sb .ccache | awk '{print $1}')
+          else
+            cache_size=0
+          fi
+
+          cache_size_mb=$(( cache_size / 1024 / 1024 ))
+          echo "Cache Size: ~${cache_size_mb} MB (${cache_size} B)"
+
+          echo
+          df -hT / /home /mnt /builder || true
+
       - name: Compile OpenWrt
-        working-directory: /builder
         id: compile
         continue-on-error: true
+        working-directory: /builder
         env:
           git_name: grandway2025
           git_password: ${{ secrets.CLONE_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
+          set -o pipefail
 
-          echo "============================================================"
-          echo "Compile OpenWrt"
-          echo "============================================================"
+          export ${{ inputs.build_options }}
+          export LAN="${{ inputs.lan_addr }}"
+          export USE_GCC15=y
+          export mihomo_core="${{ inputs.mihomo_core }}"
 
-          echo "DEVICE=${DEVICE}"
-          echo "build_version=${build_version}"
-          echo "LAN=${LAN_ADDR}"
-          echo "mihomo_core=${MIHOMO_CORE}"
-          echo "CCACHE_ENABLE=${CCACHE_ENABLE}"
-          echo "BUILD_OPTIONS=${BUILD_OPTIONS}"
-
-          # 保留你原来的动态构建参数导出方式
-          export ${BUILD_OPTIONS} LAN="${LAN_ADDR}" USE_GCC15=y
-          export mihomo_core="${MIHOMO_CORE}"
-
-          if [ "${CCACHE_ENABLE}" = "true" ]; then
+          if [ "${{ inputs.ccache }}" = "true" ]; then
             export ENABLE_CCACHE=y
           fi
 
-          if [ -n "${ROOT_PASSWORD_INPUT}" ]; then
-            export ROOT_PASSWORD="${ROOT_PASSWORD_INPUT}"
+          if [ -n "${{ inputs.root_password }}" ]; then
+            export ROOT_PASSWORD="${{ inputs.root_password }}"
           fi
 
+          echo "Build env:"
+          echo "DEVICE=${{ inputs.device }}"
+          echo "VERSION=${{ inputs.version }}"
+          echo "BUILD_VERSION=${{ env.build_version }}"
+          echo "LAN=${{ inputs.lan_addr }}"
+          echo "MIHOMO_CORE=${{ inputs.mihomo_core }}"
+          echo "CCACHE=${{ inputs.ccache }}"
+          echo "BUILD_OPTIONS=${{ inputs.build_options }}"
           echo
-          echo "Start remote build script:"
-          echo "bash <(curl -sS http://127.0.0.1:8080/build.sh) ${build_version} ${DEVICE}"
+          df -hT / /home /mnt /builder || true
 
-          bash /builder/build.sh "${build_version}" "${DEVICE}"
+          bash <(curl -fsSL http://127.0.0.1:8080/build.sh) "${{ env.build_version }}" "${{ inputs.device }}"
 
           cd openwrt
 
-          if [ "${RELEASE_VERSION}" = "release" ]; then
+          if [ "${{ inputs.version }}" = "release" ]; then
             tags="OpenWrt-$(git describe --abbrev=0 --tags)"
           else
-            tags="snapshot-25.12-$(git log -n 1 --date=format:"%Y%m%d" --format="%cd")-$(git log --pretty=format:"%h" -1)"
+            tags="snapshot-25.12-$(git log -n 1 --date=format:'%Y%m%d' --format='%cd')-$(git log --pretty=format:'%h' -1)"
           fi
 
-          echo "latest_release=${tags}" >> "${GITHUB_ENV}"
-          echo "latest_release=${tags}"
+          echo "latest_release=${tags}" >> "$GITHUB_ENV"
+
+      - name: Limited logs after a failed compilation
+        if: steps.compile.outcome == 'failure'
+        working-directory: /builder
+        run: |
+          echo "Compilation failed. Show limited diagnostics only."
+          echo
+          echo "Disk:"
+          df -hT / /home /mnt /builder || true
+
+          echo
+          echo "Top large directories in /builder:"
+          sudo du -xh /builder --max-depth=2 2>/dev/null | sort -h | tail -n 80 || true
+
+          echo
+          echo "Search package logs:"
+          if [ -d /builder/openwrt/logs ]; then
+            find /builder/openwrt/logs -type f | sort | tail -n 80 || true
+
+            echo
+            echo "Last package logs:"
+            find /builder/openwrt/logs -type f \
+              \( -iname '*libxml2*' -o -iname '*libnftnl*' -o -iname '*.txt' -o -iname '*.log' \) \
+              | sort \
+              | tail -n 20 \
+              | while read -r log; do
+                  echo
+                  echo "===== $log ====="
+                  tail -n 120 "$log" || true
+                done
+          else
+            echo "No /builder/openwrt/logs directory."
+          fi
+
+          echo
+          echo "Do not run make V=s here to avoid filling GitHub runner diagnostic logs."
 
       - name: Stop if compile failed
-        if: steps.compile.outcome != 'success'
+        if: steps.compile.outcome == 'failure'
+        run: exit 1
+
+      - name: Delete old ccache
+        if: ${{ inputs.ccache && !(inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          echo "::error::Compile OpenWrt failed."
-          echo "Please check the Compile OpenWrt log above."
-          exit 1
+          gh cache delete "${CACHE_KEY}" || true
 
-      - name: Collect firmware files
+      - name: Save ccache
+        if: ${{ inputs.ccache && !(inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: /builder/.ccache
+          key: ${{ env.CACHE_KEY }}
+
+      - name: Create ccache tar files
+        if: ${{ inputs.ccache && (inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        continue-on-error: true
+        working-directory: /builder
         run: |
-          set -e
+          mkdir -p ccache
 
-          echo "============================================================"
-          echo "Collect firmware files"
-          echo "============================================================"
+          if [ -d .ccache ]; then
+            tar cf - .ccache | split -d -b 1800m - "ccache/${{ inputs.device }}.tar."
+            ls -lh ccache
+          else
+            echo "No .ccache directory found, skip ccache tar."
+          fi
 
-          mkdir -p "${ROM_DIR}"
+      - name: Generate ccache release info
+        if: ${{ inputs.ccache && (inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        working-directory: /builder
+        run: |
+          if [ ! -f "$RELEASE_INFO_SCRIPT" ]; then
+            echo "Release info script not found: $RELEASE_INFO_SCRIPT"
+            find "$GITHUB_WORKSPACE" -name "gen-release-info.sh" -type f || true
+            exit 1
+          fi
 
-          echo "latest_release=${latest_release:-unknown}"
+          bash "$RELEASE_INFO_SCRIPT"
+        env:
+          RELEASE_TAG: ccache-${{ inputs.device }}
+          DEVICE: ${{ inputs.device }}
+          LAN_ADDR: ${{ inputs.lan_addr }}
+          ROOT_PASSWORD: ${{ inputs.root_password }}
+          KERNEL_VERSION: auto
+          GCC_VERSION: GCC15
+          WEB_SERVER: nginx
+          MIHOMO_CORE: ${{ inputs.mihomo_core }}
+          DOCKER: auto
+          BUILD_OPTIONS: ${{ inputs.build_options }}
+          OPENWRT_DIR: /builder/openwrt
+          MANIFEST_FILE: /builder/info/manifest.txt
+          CONFIG_BUILDINFO: /builder/info/config.buildinfo
+          OUTPUT_FILE: /builder/info/ccache-info.md
+          INFO_MODE: minimal
 
-          case "${DEVICE}" in
+      - name: Upload ccache release
+        if: ${{ inputs.ccache && (inputs.device == 'armv8' || inputs.device == 'nanopi-r4s') }}
+        continue-on-error: true
+        uses: ncipollo/release-action@main
+        with:
+          name: ccache
+          tag: ccache
+          commit: ${{ github.ref_name }}
+          bodyFile: /builder/info/ccache-info.md
+          allowUpdates: true
+          replacesArtifacts: true
+          prerelease: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: /builder/ccache/*
+
+      - name: Prepare Firmware Files
+        working-directory: /builder
+        run: |
+          mkdir -p rom info
+
+          case "${{ inputs.device }}" in
             x86_64)
-              TARGET_DIRS="
-              /builder/openwrt/bin/targets/x86/64
-              /builder/bin/targets/x86/64
-              openwrt/bin/targets/x86/64
-              bin/targets/x86/64
-              "
+              cp -a openwrt/bin/targets/x86/*/*-ext4-combined-efi.img.gz rom/ || true
+              cp -a openwrt/bin/targets/x86/*/*-squashfs-combined-efi.img.gz rom/ || true
+              cp -a openwrt/bin/targets/x86/*/*-generic-rootfs.tar.gz rom/ || true
+              cp -a openwrt/x86_64-*.tar.gz rom/ || true
+
+              manifest_file="$(find openwrt/bin/targets/x86 -name "*.manifest" -type f | head -n 1 || true)"
+              config_file="$(find openwrt/bin/targets/x86 -name "config.buildinfo" -type f | head -n 1 || true)"
               ;;
 
             armv8)
-              TARGET_DIRS="
-              /builder/openwrt/bin/targets/armsr/armv8
-              /builder/bin/targets/armsr/armv8
-              openwrt/bin/targets/armsr/armv8
-              bin/targets/armsr/armv8
-              "
+              tar zcf rom/u-boot-qemu_armv8.tar.gz -C openwrt/bin/targets/armsr/armv8*/ ./u-boot-qemu_armv8 || true
+              cp -a openwrt/bin/targets/armsr/armv8*/*-generic-initramfs-kernel.bin rom/ || true
+              cp -a openwrt/bin/targets/armsr/armv8*/*-generic-kernel.bin rom/ || true
+              cp -a openwrt/bin/targets/armsr/armv8*/*-generic-ext4-combined-efi.img.gz rom/ || true
+              cp -a openwrt/bin/targets/armsr/armv8*/*-generic-squashfs-combined-efi.img.gz rom/ || true
+              cp -a openwrt/bin/targets/armsr/armv8*/*-rootfs.tar.gz rom/ || true
+              cp -a openwrt/armv8-*.tar.gz rom/ || true
+
+              manifest_file="$(find openwrt/bin/targets/armsr -name "*.manifest" -type f | head -n 1 || true)"
+              config_file="$(find openwrt/bin/targets/armsr -name "config.buildinfo" -type f | head -n 1 || true)"
               ;;
 
-            nanopi-r4s|nanopi-r5s|nanopi-r6s|nanopi-r76s)
-              TARGET_DIRS="
-              /builder/openwrt/bin/targets/rockchip/armv8
-              /builder/bin/targets/rockchip/armv8
-              openwrt/bin/targets/rockchip/armv8
-              bin/targets/rockchip/armv8
-              "
-              ;;
+            nanopi-*)
+              cp -a openwrt/bin/targets/rockchip/*/*.img.gz rom/ || true
+              cp -a openwrt/aarch64-*.tar.gz rom/ || true
 
-            *)
-              TARGET_DIRS="
-              /builder/openwrt/bin/targets
-              /builder/bin/targets
-              openwrt/bin/targets
-              bin/targets
-              "
+              manifest_file="$(find openwrt/bin/targets/rockchip -name "*.manifest" -type f | head -n 1 || true)"
+              config_file="$(find openwrt/bin/targets/rockchip -name "config.buildinfo" -type f | head -n 1 || true)"
               ;;
           esac
 
-          TARGET_DIRS="${TARGET_DIRS}
-          /builder/openwrt/bin/targets
-          /builder/bin/targets
-          "
+          if [ -n "${manifest_file:-}" ] && [ -f "$manifest_file" ]; then
+            cp -a "$manifest_file" info/manifest.txt
+          fi
 
-          echo "Candidate target dirs:"
-          echo "${TARGET_DIRS}"
+          if [ -n "${config_file:-}" ] && [ -f "$config_file" ]; then
+            cp -a "$config_file" info/config.buildinfo
+          fi
 
-          for dir in ${TARGET_DIRS}; do
-            if [ ! -d "${dir}" ]; then
-              continue
-            fi
-
-            echo
-            echo "Scan: ${dir}"
-
-            find "${dir}" -type f \
-              \( \
-                -name "*.img" -o \
-                -name "*.img.gz" -o \
-                -name "*.bin" -o \
-                -name "*.itb" -o \
-                -name "*.ubi" -o \
-                -name "*.iso" -o \
-                -name "*.vmdk" -o \
-                -name "*.vdi" -o \
-                -name "*.qcow2" -o \
-                -name "*.tar" -o \
-                -name "*.tar.gz" \
-              \) \
-              -print | while read -r file; do
-                echo "Copy: ${file}"
-                cp -av "${file}" "${ROM_DIR}/"
-              done
-          done
-
-          echo
-          echo "Collected files:"
-          find "${ROM_DIR}" -maxdepth 1 -type f -printf "%f\n" | sort || true
-
-          count="$(find "${ROM_DIR}" -maxdepth 1 -type f | wc -l)"
-          echo "Firmware count: ${count}"
-
-          if [ "${count}" -eq 0 ]; then
-            echo "::error::No firmware files collected into ${ROM_DIR}."
-            echo
-            echo "Debug directories:"
-            find /builder -maxdepth 5 -type d | sort | head -300 || true
+          if [ ! -s info/manifest.txt ]; then
+            echo "manifest.txt not found or empty"
+            find openwrt/bin/targets -name "*.manifest" -type f || true
             exit 1
           fi
 
-      - name: Clean unwanted files
-        run: |
-          set -e
-
-          echo "============================================================"
-          echo "Clean unwanted files"
-          echo "============================================================"
-
-          find "${ROM_DIR}" -maxdepth 1 -type f \
-            \( \
-              -name "*.manifest" -o \
-              -name "*.buildinfo" -o \
-              -name "*.json" -o \
-              -name "profiles.json" \
-            \) \
-            -print -delete || true
-
-          echo "Remaining firmware files:"
-          find "${ROM_DIR}" -maxdepth 1 -type f -printf "%f\n" | sort
-
-          count="$(find "${ROM_DIR}" -maxdepth 1 -type f | wc -l)"
-          if [ "${count}" -eq 0 ]; then
-            echo "::error::No uploadable firmware files after cleanup."
+          if [ ! "$(find rom -type f | wc -l)" -gt 0 ]; then
+            echo "No firmware files found in /builder/rom"
+            find openwrt/bin/targets -type f | sed -n '1,160p'
             exit 1
           fi
 
-      - name: Generate release metadata
-        run: |
-          set -e
+          cd rom
+          sha256sum * > ../info/sha256sums.txt
 
-          echo "============================================================"
-          echo "Generate release metadata"
-          echo "============================================================"
-
-          mkdir -p "${INFO_DIR}"
-
-          BUILD_TIME="$(date '+%Y-%m-%d %H:%M:%S')"
-          TAG_TIME="$(date '+%Y.%m.%d-%H%M')"
-
-          if [ -n "${latest_release:-}" ]; then
-            BASE_TAG="${latest_release}"
-          else
-            BASE_TAG="${RELEASE_VERSION}"
-          fi
-
-          SAFE_BASE_TAG="$(echo "${BASE_TAG}" | tr ' /:@' '----')"
-
-          RELEASE_TAG="${SAFE_BASE_TAG}-${DEVICE}-${TAG_TIME}"
-          RELEASE_NAME="${DEVICE} - ${BASE_TAG} - ${TAG_TIME}"
-
-          echo "BUILD_TIME=${BUILD_TIME}" >> "${GITHUB_ENV}"
-          echo "RELEASE_TAG=${RELEASE_TAG}" >> "${GITHUB_ENV}"
-          echo "RELEASE_NAME=${RELEASE_NAME}" >> "${GITHUB_ENV}"
-
-          {
-            echo "# OpenWrt Firmware"
-            echo
-            echo "## Build Information"
-            echo
-            echo "| Item | Value |"
-            echo "| ---- | ----- |"
-            echo "| Device | ${DEVICE} |"
-            echo "| Build Version | ${RELEASE_VERSION} |"
-            echo "| Latest Release | ${latest_release:-unknown} |"
-            echo "| Build Time | ${BUILD_TIME} |"
-            echo "| LAN IP | ${LAN_ADDR} |"
-            echo "| Mihomo Core | ${MIHOMO_CORE} |"
-            echo "| ccache | ${CCACHE_ENABLE} |"
-            echo "| Repository | ${GITHUB_REPOSITORY} |"
-            echo "| Branch | ${GITHUB_REF_NAME} |"
-            echo "| Commit | ${GITHUB_SHA} |"
-            echo
-            echo "## Firmware Files"
-            echo
-            find "${ROM_DIR}" -maxdepth 1 -type f -printf "- %f\n" | sort
-            echo
-            echo "## SHA256"
-            echo
-            echo '```text'
-            cd "${ROM_DIR}"
-            sha256sum * | sort
-            echo '```'
-          } > "${INFO_DIR}/release.md"
-
-          {
-            echo "## OpenWrt Build Summary"
-            echo
-            echo "- Device: ${DEVICE}"
-            echo "- Build Version: ${RELEASE_VERSION}"
-            echo "- Latest Release: ${latest_release:-unknown}"
-            echo "- Build Time: ${BUILD_TIME}"
-            echo "- Release Tag: ${RELEASE_TAG}"
-            echo
-            echo "### Firmware Files"
-            echo
-            find "${ROM_DIR}" -maxdepth 1 -type f -printf "- %f\n" | sort
-          } > "${INFO_DIR}/summary.md"
-
-          echo "RELEASE_TAG=${RELEASE_TAG}"
-          echo "RELEASE_NAME=${RELEASE_NAME}"
+          echo "Prepared files:"
+          ls -lh /builder/rom
 
           echo
-          echo "Release notes preview:"
-          cat "${INFO_DIR}/release.md"
+          echo "Manifest:"
+          ls -lh /builder/info/manifest.txt
 
-      - name: Append summary
-        if: always()
+          echo
+          echo "Config buildinfo:"
+          ls -lh /builder/info/config.buildinfo || true
+
+          echo
+          echo "SHA256:"
+          cat /builder/info/sha256sums.txt
+
+      - name: Generate release info
+        working-directory: /builder
         run: |
-          if [ -f "${INFO_DIR}/summary.md" ]; then
-            cat "${INFO_DIR}/summary.md" >> "${GITHUB_STEP_SUMMARY}"
+          if [ ! -f "$RELEASE_INFO_SCRIPT" ]; then
+            echo "Release info script not found: $RELEASE_INFO_SCRIPT"
+            find "$GITHUB_WORKSPACE" -name "gen-release-info.sh" -type f || true
+            exit 1
           fi
 
-      - name: Upload workflow artifacts
+          if [ ! -f /builder/info/manifest.txt ]; then
+            echo "/builder/info/manifest.txt not found"
+            find /builder/openwrt/bin/targets -name "*.manifest" -type f || true
+            exit 1
+          fi
+
+          bash "$RELEASE_INFO_SCRIPT"
+
+          TITLE_DATE="$(date '+%Y.%m.%d-%H%M')"
+          DEVICE_TITLE="$(echo "${{ inputs.device }}" | tr '[:lower:]' '[:upper:]')"
+          RELEASE_TITLE="${TITLE_DATE} • ${DEVICE_TITLE} • ${{ env.latest_release }}"
+
+          echo "release_title=${RELEASE_TITLE}" >> "$GITHUB_ENV"
+
+          echo
+          echo "Release title:"
+          echo "$RELEASE_TITLE"
+
+          echo
+          echo "Release body:"
+          cat /builder/info/info.md
+        env:
+          RELEASE_TAG: ${{ env.latest_release }}
+          DEVICE: ${{ inputs.device }}
+          LAN_ADDR: ${{ inputs.lan_addr }}
+          ROOT_PASSWORD: ${{ inputs.root_password }}
+
+          KERNEL_VERSION: auto
+          GCC_VERSION: GCC15
+          WEB_SERVER: nginx
+          MIHOMO_CORE: ${{ inputs.mihomo_core }}
+          DOCKER: auto
+
+          BUILD_OPTIONS: ${{ inputs.build_options }}
+          OPENWRT_DIR: /builder/openwrt
+          MANIFEST_FILE: /builder/info/manifest.txt
+          CONFIG_BUILDINFO: /builder/info/config.buildinfo
+          OUTPUT_FILE: /builder/info/info.md
+          INFO_MODE: full
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ inputs.device }}-${{ github.run_number }}-${{ github.run_attempt }}
-          path: |
-            /builder/rom/*
-            /builder/info/release.md
-            /builder/info/summary.md
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 7
-          overwrite: true
+          name: ${{ inputs.device }}-openwrt-${{ env.latest_release }}
+          path: /builder/rom/*
 
-      - name: Create or update GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -e
-
-          echo "============================================================"
-          echo "Create or update GitHub Release"
-          echo "============================================================"
-
-          echo "RELEASE_TAG=${RELEASE_TAG}"
-          echo "RELEASE_NAME=${RELEASE_NAME}"
-
-          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "Release exists, update it."
-
-            gh release edit "${RELEASE_TAG}" \
-              --title "${RELEASE_NAME}" \
-              --notes-file "${INFO_DIR}/release.md"
-          else
-            echo "Create new release."
-
-            gh release create "${RELEASE_TAG}" \
-              --title "${RELEASE_NAME}" \
-              --notes-file "${INFO_DIR}/release.md" \
-              --target "${GITHUB_SHA}"
-          fi
-
-          echo
-          echo "Upload firmware assets..."
-
-          for file in "${ROM_DIR}"/*; do
-            [ -f "${file}" ] || continue
-
-            name="$(basename "${file}")"
-
-            echo "Delete old asset if exists: ${name}"
-            gh release delete-asset "${RELEASE_TAG}" "${name}" -y || true
-
-            echo "Upload asset: ${file}"
-            gh release upload "${RELEASE_TAG}" "${file}" --clobber
-          done
-
-      - name: Verify release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -e
-
-          echo "============================================================"
-          echo "Verify release"
-          echo "============================================================"
-
-          gh release view "${RELEASE_TAG}"
-
-          echo
-          echo "Release assets:"
-          gh release view "${RELEASE_TAG}" --json assets \
-            --jq '.assets[] | "- " + .name + " (" + (.size|tostring) + " bytes)"'
-
-          expected_count="$(find "${ROM_DIR}" -maxdepth 1 -type f | wc -l)"
-          actual_count="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets | length')"
-
-          echo
-          echo "Expected assets: ${expected_count}"
-          echo "Actual assets: ${actual_count}"
-
-          if [ "${actual_count}" -lt "${expected_count}" ]; then
-            echo "::error::Release uploaded assets count is less than local firmware count."
-            exit 1
-          fi
+      - name: Create release
+        uses: ncipollo/release-action@main
+        with:
+          name: ${{ env.release_title }}
+          tag: ${{ env.latest_release }}
+          commit: ${{ github.ref_name }}
+          bodyFile: /builder/info/info.md
+          allowUpdates: true
+          replacesArtifacts: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: /builder/rom/*
