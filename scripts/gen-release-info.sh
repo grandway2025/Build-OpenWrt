@@ -6,29 +6,6 @@ set -euo pipefail
 # Output:
 #   /builder/info/info.md
 #   /builder/info/summary.md
-#   /builder/rom/sha256sums.txt
-#
-# Expected env, all optional:
-#   ROM_DIR
-#   INFO_DIR
-#   OPENWRT_VERSION
-#   BUILD_TIME
-#   DEVICE
-#   TARGET
-#   KERNEL_VERSION
-#   GCC_VERSION
-#   WEB_SERVER
-#   DOCKER
-#   MIHOMO_CORE
-#   LAN_ADDR
-#   ROOT_PASSWORD
-#   BUILD_OPTIONS
-#   RELEASE_TITLE
-#   SOURCE_REPO
-#   SOURCE_BRANCH
-#   SOURCE_COMMIT
-#   CONFIG_FILE
-#   PLUGINS
 # ============================================================
 
 ROM_DIR="${ROM_DIR:-/builder/rom}"
