@@ -174,7 +174,7 @@ jobs:
         key: openwrt-25.12-${{ github.event.inputs.device }}-ccache
 
     - name: Create ccache tar files
-      if: ${{ github.event.inputs.ccache == 'true' && github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s' }}
+      if: ${{ github.event.inputs.ccache == 'true' && (github.event.inputs.device == 'armv8' || github.event.inputs.device == 'nanopi-r4s') }}
       continue-on-error: true
       working-directory: /builder
       run: |
