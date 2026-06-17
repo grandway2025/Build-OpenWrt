@@ -138,7 +138,7 @@ jobs:
         export ${{ github.event.inputs.build_options }} LAN=${{ github.event.inputs.lan_addr }} USE_GCC15=y
         export mihomo_core="${{ github.event.inputs.mihomo_core }}"
         [ ${{ github.event.inputs.ccache }} = 'true' ] && export ENABLE_CCACHE=y
-        [ -n ${{ github.event.inputs.root_password }} ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
+        [ -n "${{ github.event.inputs.root_password }}" ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
         bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ env.build_version }} ${{ github.event.inputs.device }}
         cd openwrt
         if [ "${{ github.event.inputs.version }}" = release ]; then
@@ -223,12 +223,43 @@ jobs:
           cp -a openwrt/bin/targets/armsr/armv8*/config.buildinfo info/config.buildinfo
           cd rom && sha256sum * > ../info/sha256sums.txt
         fi
-
+        
+    - name: Generate release info
+      working-directory: /builder
+      env:
+        INFO_DIR: /builder/info
+        OPENWRT_VERSION: ${{ env.latest_release }}
+        DEVICE: ${{ github.event.inputs.device }}
+        TARGET: ${{ github.event.inputs.device }}
+        WEB_SERVER: unknown
+        DOCKER: auto
+        MIHOMO_CORE: ${{ github.event.inputs.mihomo_core }}
+        LAN_ADDR: ${{ github.event.inputs.lan_addr }}
+        ROOT_PASSWORD: ${{ github.event.inputs.root_password }}
+        BUILD_OPTIONS: ${{ github.event.inputs.build_options }}
+        RELEASE_TITLE: ${{ env.latest_release }}
+        SOURCE_REPO: ${{ github.repository }}
+        SOURCE_BRANCH: ${{ github.ref_name }}
+        SOURCE_COMMIT: ${{ github.sha }}
+      run: |
+        set -e
+        export BUILD_TIME="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+        if [ -f /builder/info/config.buildinfo ]; then
+          export KERNEL_VERSION="$(grep -E '^CONFIG_LINUX_[0-9]+_[0-9]+=' /builder/info/config.buildinfo | sed -E 's/CONFIG_LINUX_([0-9]+)_([0-9]+)=y/\1.\2/' | head -1 || true)"
+          export GCC_VERSION="$(grep -E '^CONFIG_GCC_VERSION=' /builder/info/config.buildinfo | cut -d '"' -f2 | head -1 || true)"
+        fi
+        export KERNEL_VERSION="${KERNEL_VERSION:-unknown}"
+        export GCC_VERSION="${GCC_VERSION:-unknown}"
+        chmod +x "${GITHUB_WORKSPACE}/r4s_build_script/scripts/gen-release-info.sh"
+        "${GITHUB_WORKSPACE}/r4s_build_script/scripts/gen-release-info.sh"
+        cat /builder/info/summary.md >> "$GITHUB_STEP_SUMMARY"
+        
     - name: Upload artifacts
       uses: actions/upload-artifact@main
       with:
         name: ${{ github.event.inputs.device }}-openwrt-${{ env.latest_release }}
-        path: ${{ env.build_dir }}/rom/*
+        ${{ env.build_dir }}/rom/*
+        ${{ env.build_dir }}/info/*
 
     - name: Create release
       continue-on-error: true
@@ -240,4 +271,5 @@ jobs:
         commit: ${{ github.ref_name }}
         replacesArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
+        bodyFile: ${{ env.build_dir }}/info/info.md
         artifacts: ${{ env.build_dir }}/rom/*
