@@ -184,13 +184,13 @@ jobs:
           echo
           echo "Detect build script..."
 
-          if [ -x "scripts/build-openwrt.sh" ]; then
-            echo "Use scripts/build-openwrt.sh"
-            scripts/build-openwrt.sh
+          if [ -x "openwrt/build.sh" ]; then
+            echo "Use openwrt/build.sh"
+            openwrt/build.sh
 
-          elif [ -f "scripts/build-openwrt.sh" ]; then
-            echo "Use bash scripts/build-openwrt.sh"
-            bash scripts/build-openwrt.sh
+          elif [ -f "openwrt/build.sh" ]; then
+            echo "Use bash openwrt/build.sh"
+            bash openwrt/build.sh
 
           elif [ -x "scripts/build-release.sh" ]; then
             echo "Use scripts/build-release.sh"
