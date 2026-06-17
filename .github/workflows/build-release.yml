@@ -258,8 +258,9 @@ jobs:
       uses: actions/upload-artifact@main
       with:
         name: ${{ github.event.inputs.device }}-openwrt-${{ env.latest_release }}
-        ${{ env.build_dir }}/rom/*
-        ${{ env.build_dir }}/info/*
+        path: |
+          ${{ env.build_dir }}/rom/*
+          ${{ env.build_dir }}/info/*
 
     - name: Create release
       continue-on-error: true
