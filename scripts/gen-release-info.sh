@@ -1,342 +1,400 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
 # ============================================================
-# OpenWrt Release Info Generator
+# Generate OpenWrt release markdown info
+# Output:
+#   /builder/info/info.md
+#   /builder/info/summary.md
+#   /builder/rom/sha256sums.txt
 #
-# 必需环境变量：
-#   RELEASE_TAG
+# Expected env, all optional:
+#   ROM_DIR
+#   INFO_DIR
+#   OPENWRT_VERSION
+#   BUILD_TIME
 #   DEVICE
-#
-# 可选环境变量：
-#   LAN_ADDR
-#   ROOT_PASSWORD
-#   MANIFEST_FILE
-#   CONFIG_BUILDINFO
-#   OPENWRT_DIR
+#   TARGET
 #   KERNEL_VERSION
 #   GCC_VERSION
 #   WEB_SERVER
-#   MIHOMO_CORE
 #   DOCKER
+#   MIHOMO_CORE
+#   LAN_ADDR
+#   ROOT_PASSWORD
 #   BUILD_OPTIONS
-#   OUTPUT_FILE
-#   INFO_MODE: full | minimal
-#   CURATED_LIST
+#   RELEASE_TITLE
+#   SOURCE_REPO
+#   SOURCE_BRANCH
+#   SOURCE_COMMIT
+#   CONFIG_FILE
+#   PLUGINS
 # ============================================================
 
-set -e
+ROM_DIR="${ROM_DIR:-/builder/rom}"
+INFO_DIR="${INFO_DIR:-/builder/info}"
 
-OUTPUT_FILE="${OUTPUT_FILE:-info/info.md}"
-MANIFEST_FILE="${MANIFEST_FILE:-info/manifest.txt}"
-CONFIG_BUILDINFO="${CONFIG_BUILDINFO:-info/config.buildinfo}"
-OPENWRT_DIR="${OPENWRT_DIR:-openwrt}"
-INFO_MODE="${INFO_MODE:-full}"
+mkdir -p "${ROM_DIR}" "${INFO_DIR}"
 
-mkdir -p "$(dirname "$OUTPUT_FILE")"
+INFO_MD="${INFO_DIR}/info.md"
+SUMMARY_MD="${INFO_DIR}/summary.md"
+SHA_FILE="${ROM_DIR}/sha256sums.txt"
 
-BUILD_DATE="$(date '+%Y-%m-%d %H:%M:%S')"
-
-RELEASE_TAG="${RELEASE_TAG:-unknown}"
+OPENWRT_VERSION="${OPENWRT_VERSION:-OpenWrt}"
+BUILD_TIME="${BUILD_TIME:-$(date -u '+%Y-%m-%d %H:%M:%S UTC')}"
 DEVICE="${DEVICE:-unknown}"
+TARGET="${TARGET:-${DEVICE}}"
+KERNEL_VERSION="${KERNEL_VERSION:-unknown}"
+GCC_VERSION="${GCC_VERSION:-unknown}"
+WEB_SERVER="${WEB_SERVER:-unknown}"
+DOCKER="${DOCKER:-auto}"
+MIHOMO_CORE="${MIHOMO_CORE:-unknown}"
 LAN_ADDR="${LAN_ADDR:-192.168.1.1}"
 ROOT_PASSWORD="${ROOT_PASSWORD:-}"
-MIHOMO_CORE="${MIHOMO_CORE:-meta}"
 BUILD_OPTIONS="${BUILD_OPTIONS:-}"
+RELEASE_TITLE="${RELEASE_TITLE:-OpenWrt 固件发布}"
+SOURCE_REPO="${SOURCE_REPO:-}"
+SOURCE_BRANCH="${SOURCE_BRANCH:-}"
+SOURCE_COMMIT="${SOURCE_COMMIT:-}"
+CONFIG_FILE="${CONFIG_FILE:-}"
 
-[ -z "$ROOT_PASSWORD" ] && ROOT_PASSWORD="无密码"
+# 插件列表。
+# 如果外部没有传入 PLUGINS，则使用默认展示列表。
+# 格式支持：
+#   PLUGINS="Docker=true PassWall=true OpenClash=false"
+# 或：
+#   PLUGINS="Docker Docker管理 PassWall OpenClash Mihomo_Nikki MosDNS OpenAppFilter UPnP TTYD Argon"
+PLUGINS="${PLUGINS:-Docker=true Docker管理=true PassWall=true OpenClash=true Mihomo_Nikki=true MosDNS=true OpenAppFilter=true UPnP=true TTYD终端=true Argon主题=true}"
 
-# ============================================================
-# 自动检测函数
-# ============================================================
-
-has_pkg() {
-    local pkg="$1"
-
-    [ -f "$MANIFEST_FILE" ] || return 1
-
-    awk '{print $1}' "$MANIFEST_FILE" | grep -qx "$pkg"
+escape_md() {
+  local s="${1:-}"
+  s="${s//\\/\\\\}"
+  s="${s//|/\\|}"
+  echo "${s}"
 }
 
-has_pkg_prefix() {
-    local prefix="$1"
+format_bool() {
+  local value="${1:-}"
 
-    [ -f "$MANIFEST_FILE" ] || return 1
-
-    awk '{print $1}' "$MANIFEST_FILE" | grep -Eq "^${prefix}($|-|_)"
+  case "${value}" in
+    true|TRUE|yes|YES|y|Y|1|enable|enabled|ENABLE|ENABLED|on|ON)
+      echo "已启用"
+      ;;
+    false|FALSE|no|NO|n|N|0|disable|disabled|DISABLE|DISABLED|off|OFF)
+      echo "未启用"
+      ;;
+    auto|AUTO|"")
+      echo "自动"
+      ;;
+    *)
+      echo "${value}"
+      ;;
+  esac
 }
 
-detect_gcc_version() {
-    if [ -n "$GCC_VERSION" ] && [ "$GCC_VERSION" != "auto" ]; then
-        echo "$GCC_VERSION"
-        return
+format_compile_status() {
+  local value="${1:-}"
+
+  case "${value}" in
+    true|TRUE|yes|YES|y|Y|1|enable|enabled|ENABLE|ENABLED|on|ON)
+      echo "✅ 已编译"
+      ;;
+    false|FALSE|no|NO|n|N|0|disable|disabled|DISABLE|DISABLED|off|OFF)
+      echo "❌ 未编译"
+      ;;
+    auto|AUTO|"")
+      echo "🔍 自动检测"
+      ;;
+    *)
+      echo "${value}"
+      ;;
+  esac
+}
+
+format_root_password() {
+  local value="${1:-}"
+
+  if [[ -z "${value}" ]]; then
+    echo "无密码"
+  else
+    echo "已设置"
+  fi
+}
+
+format_gcc() {
+  local value="${1:-}"
+
+  case "${value}" in
+    GCC15|gcc15|15)
+      echo "GCC 15"
+      ;;
+    GCC14|gcc14|14)
+      echo "GCC 14"
+      ;;
+    GCC13|gcc13|13)
+      echo "GCC 13"
+      ;;
+    GCC12|gcc12|12)
+      echo "GCC 12"
+      ;;
+    *)
+      echo "${value}"
+      ;;
+  esac
+}
+
+format_kernel() {
+  local value="${1:-}"
+
+  if [[ "${value}" == "unknown" || -z "${value}" ]]; then
+    echo "unknown"
+  else
+    echo "${value}"
+  fi
+}
+
+format_size() {
+  local file="${1:-}"
+
+  if command -v numfmt >/dev/null 2>&1; then
+    stat -c '%s' "${file}" | numfmt --to=iec --suffix=B
+  else
+    ls -lh "${file}" | awk '{print $5}'
+  fi
+}
+
+make_sha256() {
+  : > "${SHA_FILE}"
+
+  shopt -s nullglob
+  local files=("${ROM_DIR}"/*)
+
+  if [[ "${#files[@]}" -eq 0 ]]; then
+    echo "::error::No firmware files found in ${ROM_DIR}" >&2
+    exit 1
+  fi
+
+  for file in "${files[@]}"; do
+    [[ -f "${file}" ]] || continue
+
+    # 避免重复把 sha256sums.txt 自己写进去
+    if [[ "$(basename "${file}")" == "sha256sums.txt" ]]; then
+      continue
     fi
 
-    if echo "$BUILD_OPTIONS" | grep -qw "USE_GCC13=y"; then
-        echo "GCC13"
-    elif echo "$BUILD_OPTIONS" | grep -qw "USE_GCC14=y"; then
-        echo "GCC14"
-    elif echo "$BUILD_OPTIONS" | grep -qw "USE_GCC15=y"; then
-        echo "GCC15"
-    elif echo "$BUILD_OPTIONS" | grep -qw "USE_GCC16=y"; then
-        echo "GCC16"
-    elif [ -f "$CONFIG_BUILDINFO" ] && grep -q "CONFIG_GCC_USE_VERSION_13=y" "$CONFIG_BUILDINFO"; then
-        echo "GCC13"
-    elif [ -f "$CONFIG_BUILDINFO" ] && grep -q "CONFIG_GCC_USE_VERSION_14=y" "$CONFIG_BUILDINFO"; then
-        echo "GCC14"
-    elif [ -f "$CONFIG_BUILDINFO" ] && grep -q "CONFIG_GCC_USE_VERSION_15=y" "$CONFIG_BUILDINFO"; then
-        echo "GCC15"
-    elif [ -f "$CONFIG_BUILDINFO" ] && grep -q "CONFIG_GCC_USE_VERSION_16=y" "$CONFIG_BUILDINFO"; then
-        echo "GCC16"
+    sha256sum "${file}" >> "${SHA_FILE}"
+  done
+
+  if [[ ! -s "${SHA_FILE}" ]]; then
+    echo "::error::No valid files for sha256 generation." >&2
+    exit 1
+  fi
+}
+
+render_plugins_table() {
+  echo "| 插件 | 状态 |"
+  echo "|---|---|"
+
+  local item name value display_name status
+
+  # shellcheck disable=SC2206
+  local arr=(${PLUGINS})
+
+  for item in "${arr[@]}"; do
+    if [[ "${item}" == *"="* ]]; then
+      name="${item%%=*}"
+      value="${item#*=}"
     else
-        echo "GCC15"
-    fi
-}
-
-detect_web_server() {
-    if [ -n "$WEB_SERVER" ] && [ "$WEB_SERVER" != "auto" ]; then
-        echo "$WEB_SERVER"
-        return
+      name="${item}"
+      value="true"
     fi
 
-    if echo "$BUILD_OPTIONS" | grep -qw "ENABLE_UHTTPD=y"; then
-        echo "uhttpd"
-    elif [ -f "$MANIFEST_FILE" ] && has_pkg "uhttpd"; then
-        echo "uhttpd"
-    else
-        echo "nginx"
-    fi
+    display_name="${name//_/ }"
+    status="$(format_compile_status "${value}")"
+
+    echo "| $(escape_md "${display_name}") | ${status} |"
+  done
 }
 
-detect_docker() {
-    if [ -n "$DOCKER" ] && [ "$DOCKER" != "auto" ]; then
-        echo "$DOCKER"
-        return
-    fi
+render_assets_table() {
+  echo "| 文件 | 大小 | SHA256 |"
+  echo "|---|---:|---|"
 
-    if has_pkg "dockerd" || has_pkg "docker" || has_pkg "luci-app-dockerman"; then
-        echo "true"
-    else
-        echo "false"
-    fi
-}
+  shopt -s nullglob
+  local file name size sha
 
-detect_kernel_version() {
-    if [ -n "$KERNEL_VERSION" ] && [ "$KERNEL_VERSION" != "auto" ]; then
-        echo "$KERNEL_VERSION"
-        return
+  while read -r sha name; do
+    file="${ROM_DIR}/${name}"
+
+    if [[ ! -f "${file}" ]]; then
+      continue
     fi
 
-    # 优先从 kmod 压缩包名称里提取
-    # 例如：
-    # x86_64-6.6.104~xxxx-r1.tar.gz
-    # armv8-6.6.104~xxxx-r1.tar.gz
-    # aarch64-6.6.104~xxxx-r1.tar.gz
-    local kmod_file
-    kmod_file="$(find "$OPENWRT_DIR" -maxdepth 1 -type f -name "*.tar.gz" 2>/dev/null | head -n 1 || true)"
+    size="$(format_size "${file}")"
 
-    if [ -n "$kmod_file" ]; then
-        basename "$kmod_file" \
-            | sed -E 's/^(x86_64|armv8|aarch64)-//' \
-            | sed -E 's/\.tar\.gz$//'
-        return
+    echo "| \`${name}\` | ${size} | \`${sha}\` |"
+  done < <(cd "${ROM_DIR}" && sha256sum $(find . -maxdepth 1 -type f ! -name 'sha256sums.txt' -printf '%f\n' | sort))
+}
+
+render_asset_list() {
+  shopt -s nullglob
+
+  local file name size
+
+  for file in "${ROM_DIR}"/*; do
+    [[ -f "${file}" ]] || continue
+    name="$(basename "${file}")"
+
+    if [[ "${name}" == "sha256sums.txt" ]]; then
+      continue
     fi
 
-    # 其次尝试从 config.buildinfo 读取 kernel patchver
-    if [ -f "$CONFIG_BUILDINFO" ]; then
-        local patchver
-        patchver="$(grep -E '^CONFIG_KERNEL_PATCHVER=' "$CONFIG_BUILDINFO" | head -n1 | cut -d '"' -f2 || true)"
-        if [ -n "$patchver" ]; then
-            echo "$patchver"
-            return
-        fi
-    fi
-
-    echo "N/A"
+    size="$(format_size "${file}")"
+    echo "- \`${name}\` - ${size}"
+  done
 }
 
-GCC_VERSION="$(detect_gcc_version)"
-WEB_SERVER="$(detect_web_server)"
-DOCKER="$(detect_docker)"
-KERNEL_VERSION="$(detect_kernel_version)"
+make_sha256
 
-# ============================================================
-# 精选插件列表
-# 格式：
-# 显示名称|包名
-# 只显示 manifest 中实际存在的插件
-# ============================================================
+GCC_DISPLAY="$(format_gcc "${GCC_VERSION}")"
+KERNEL_DISPLAY="$(format_kernel "${KERNEL_VERSION}")"
+DOCKER_DISPLAY="$(format_bool "${DOCKER}")"
+ROOT_PASSWORD_DISPLAY="$(format_root_password "${ROOT_PASSWORD}")"
 
-default_curated_list() {
-    cat <<'LIST'
-Docker|dockerd
-Docker 管理|luci-app-dockerman
-ShadowSocksR Plus+|luci-app-ssr-plus
-PassWall|luci-app-passwall
-PassWall2|luci-app-passwall2
-OpenClash|luci-app-openclash
-Mihomo Nikki|luci-app-nikki
-MosDNS|luci-app-mosdns
-AdGuardHome|luci-app-adguardhome
-SmartDNS|luci-app-smartdns
-Lucky|luci-app-lucky
-FRP 内网穿透|luci-app-frpc
-OpenAppFilter|luci-app-oaf
-网络唤醒|luci-app-wol
-UPnP|luci-app-upnp
-DDNS|luci-app-ddns
-阿里云盘 FUSE|luci-app-aliyundrive-fuse
-文件助手|luci-app-filemanager
-应用过滤|luci-app-appfilter
-ZeroTier|luci-app-zerotier
-TailScale|luci-app-tailscale
-iStore 商店|luci-app-store
-QuickStart|luci-app-quickstart
-TTYD 终端|luci-app-ttyd
-Samba4|luci-app-samba4
-QoS Nftables|luci-app-qos-nft
-SQM QoS|luci-app-sqm
-Argon 主题|luci-theme-argon
-LIST
-}
-
-# ============================================================
-# 渲染区块
-# ============================================================
-
-render_header() {
-    cat <<EOF
-# 🎉 OpenWrt 固件发布
-
-EOF
-}
-
-render_build_info() {
-    cat <<EOF
-## 📊 构建信息
-
-| 项目 | 值 |
-|------|----|
-| 🏷️ 版本 | \`${RELEASE_TAG}\` |
-| 📅 编译时间 | \`${BUILD_DATE}\` |
-| 🎯 目标设备 | \`${DEVICE}\` |
-| 🐧 内核版本 | \`${KERNEL_VERSION}\` |
-| 🛠️ GCC 版本 | \`${GCC_VERSION}\` |
-| 🌐 Web 服务 | \`${WEB_SERVER}\` |
-| 🐳 Docker | \`${DOCKER}\` |
-| 🐱 Mihomo 内核 | \`${MIHOMO_CORE}\` |
-| 🌍 默认 LAN | \`${LAN_ADDR}\` |
-| 🔑 默认密码 | \`${ROOT_PASSWORD}\` |
-
-EOF
-}
-
-render_build_info_minimal() {
-    cat <<EOF
-## 📊 构建信息
-
-| 项目 | 值 |
-|------|----|
-| 🏷️ 版本 | \`${RELEASE_TAG}\` |
-| 📅 编译时间 | \`${BUILD_DATE}\` |
-| 🎯 目标设备 | \`${DEVICE}\` |
-
-EOF
-}
-
-render_build_options() {
-    [ -z "$BUILD_OPTIONS" ] && return
-
-    cat <<EOF
-## ⚙️ 构建选项
-
-\`\`\`
-${BUILD_OPTIONS}
-\`\`\`
-
-EOF
-}
-
-render_curated_compiled_only() {
-    [ -f "$MANIFEST_FILE" ] || return
-
-    local tmp_file
-    tmp_file="$(mktemp)"
-
-    if [ -n "$CURATED_LIST" ] && [ -f "$CURATED_LIST" ]; then
-        list_file="$CURATED_LIST"
-        while IFS='|' read -r name pkg; do
-            [ -z "$name" ] && continue
-            [ -z "$pkg" ] && continue
-
-            if has_pkg "$pkg"; then
-                echo "| ${name} | ✅ 已编译 |" >> "$tmp_file"
-            fi
-        done < "$list_file"
-    else
-        default_curated_list | while IFS='|' read -r name pkg; do
-            [ -z "$name" ] && continue
-            [ -z "$pkg" ] && continue
-
-            if has_pkg "$pkg"; then
-                echo "| ${name} | ✅ 已编译 |" >> "$tmp_file"
-            fi
-        done
-    fi
-
-    if [ -s "$tmp_file" ]; then
-        cat <<EOF
-## 📦 已编译插件
-
-| 插件 | 状态 |
-|------|------|
-EOF
-        cat "$tmp_file"
-        echo
-    fi
-
-    rm -f "$tmp_file"
-}
-
-render_footer() {
-    cat <<'EOF'
-## 📝 校验信息
-
-> 固件 SHA256 校验信息见 Release Assets。
-
----
-
-> 💡 刷机有风险，请确认固件与设备型号匹配后再操作。
-EOF
-}
-
-render_footer_minimal() {
-    cat <<'EOF'
----
-> SHA256 校验见 Release Assets。
-EOF
-}
-
-# ============================================================
-# 组装
-# ============================================================
+SOURCE_LINE=""
+if [[ -n "${SOURCE_REPO}" ]]; then
+  SOURCE_LINE="${SOURCE_REPO}"
+  if [[ -n "${SOURCE_BRANCH}" ]]; then
+    SOURCE_LINE="${SOURCE_LINE}@${SOURCE_BRANCH}"
+  fi
+  if [[ -n "${SOURCE_COMMIT}" ]]; then
+    SOURCE_LINE="${SOURCE_LINE} (${SOURCE_COMMIT})"
+  fi
+fi
 
 {
-    render_header
+  echo "# 🎉 OpenWrt 固件发布"
+  echo
+  echo "> 请确认固件与设备型号匹配后再刷机。刷机有风险，操作需谨慎。"
+  echo
+  echo "---"
+  echo
+  echo "## 📊 构建信息"
+  echo
+  echo "| 项目 | 值 |"
+  echo "|---|---|"
+  echo "| 🏷️ 版本 | \`${OPENWRT_VERSION}\` |"
+  echo "| 📅 编译时间 | \`${BUILD_TIME}\` |"
+  echo "| 🎯 目标设备 | \`${DEVICE}\` |"
+  echo "| 🧩 Target | \`${TARGET}\` |"
+  echo "| 🐧 内核版本 | \`${KERNEL_DISPLAY}\` |"
+  echo "| 🛠️ GCC 版本 | \`${GCC_DISPLAY}\` |"
+  echo "| 🌐 Web 服务 | \`${WEB_SERVER}\` |"
+  echo "| 🐳 Docker | \`${DOCKER_DISPLAY}\` |"
+  echo "| 🐱 Mihomo 内核 | \`${MIHOMO_CORE}\` |"
+  echo "| 🌍 默认 LAN | \`${LAN_ADDR}\` |"
+  echo "| 🔑 默认密码 | \`${ROOT_PASSWORD_DISPLAY}\` |"
 
-    case "$INFO_MODE" in
-        minimal)
-            render_build_info_minimal
-            render_footer_minimal
-            ;;
-        full|curated|*)
-            render_build_info
-            render_build_options
-            render_curated_compiled_only
-            render_footer
-            ;;
-    esac
-} > "$OUTPUT_FILE"
+  if [[ -n "${SOURCE_LINE}" ]]; then
+    echo "| 🔗 源码来源 | \`${SOURCE_LINE}\` |"
+  fi
 
-echo "✅ Release info generated: $OUTPUT_FILE"
-echo "----------------------------------------"
-cat "$OUTPUT_FILE"
-echo "----------------------------------------"
+  if [[ -n "${CONFIG_FILE}" ]]; then
+    echo "| ⚙️ 配置文件 | \`${CONFIG_FILE}\` |"
+  fi
+
+  echo
+  echo "---"
+  echo
+  echo "## ⚙️ 构建选项"
+  echo
+  if [[ -n "${BUILD_OPTIONS}" ]]; then
+    echo
+    echo '```text'
+    echo "${BUILD_OPTIONS}"
+    echo '```'
+  else
+    echo
+    echo "> 未提供额外构建选项。"
+  fi
+
+  echo
+  echo "---"
+  echo
+  echo "## 📦 已编译插件"
+  echo
+  echo
+  render_plugins_table
+
+  echo
+  echo "---"
+  echo
+  echo "## 🔐 固件校验信息"
+  echo
+  echo
+  echo "以下 SHA256 可用于下载后校验固件完整性。"
+  echo
+  echo
+  render_assets_table
+
+  echo
+  echo
+  echo "<details>"
+  echo "<summary>展开 sha256sums.txt</summary>"
+  echo
+  echo '```text'
+  cat "${SHA_FILE}"
+  echo '```'
+  echo
+  echo "</details>"
+
+  echo
+  echo "---"
+  echo
+  echo "## 🧾 固件文件"
+  echo
+  echo
+  render_asset_list
+
+  echo
+  echo "---"
+  echo
+  echo "## 💡 使用提示"
+  echo
+  echo
+  echo "- 默认管理地址：\`http://${LAN_ADDR}\`"
+  echo "- 默认密码：\`${ROOT_PASSWORD_DISPLAY}\`"
+  echo "- 建议刷机前备份当前配置。"
+  echo "- 如果是首次刷入，建议使用 factory / combined 类型镜像。"
+  echo "- 如果是系统内升级，建议使用 sysupgrade 类型镜像。"
+  echo
+  echo "> ⚠️ 刷机有风险，请确认固件、设备型号、分区布局匹配后再操作。"
+} > "${INFO_MD}"
+
+{
+  echo "## 🎉 OpenWrt 构建完成"
+  echo
+  echo "| 项目 | 值 |"
+  echo "|---|---|"
+  echo "| 版本 | \`${OPENWRT_VERSION}\` |"
+  echo "| 设备 | \`${DEVICE}\` |"
+  echo "| 内核 | \`${KERNEL_DISPLAY}\` |"
+  echo "| GCC | \`${GCC_DISPLAY}\` |"
+  echo "| LAN | \`${LAN_ADDR}\` |"
+  echo "| Docker | \`${DOCKER_DISPLAY}\` |"
+  echo
+  echo "### 固件文件"
+  echo
+  render_asset_list
+  echo
+  echo "### SHA256"
+  echo
+  echo '```text'
+  cat "${SHA_FILE}"
+  echo '```'
+} > "${SUMMARY_MD}"
+
+echo "Generated release info:"
+echo "  ${INFO_MD}"
+echo "  ${SUMMARY_MD}"
+echo "  ${SHA_FILE}"
