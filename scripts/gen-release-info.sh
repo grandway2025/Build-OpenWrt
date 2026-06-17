@@ -8,10 +8,9 @@ set -euo pipefail
 #   /builder/info/summary.md
 # ============================================================
 
-ROM_DIR="${ROM_DIR:-/builder/rom}"
 INFO_DIR="${INFO_DIR:-/builder/info}"
 
-mkdir -p "${ROM_DIR}" "${INFO_DIR}"
+mkdir -p "${INFO_DIR}"
 
 INFO_MD="${INFO_DIR}/info.md"
 SUMMARY_MD="${INFO_DIR}/summary.md"
@@ -35,7 +34,6 @@ SOURCE_COMMIT="${SOURCE_COMMIT:-}"
 CONFIG_FILE="${CONFIG_FILE:-}"
 
 # 插件列表。
-# 如果外部没有传入 PLUGINS，则使用默认展示列表。
 # 格式支持：
 #   PLUGINS="Docker=true PassWall=true OpenClash=false"
 # 或：
@@ -122,20 +120,10 @@ format_gcc() {
 format_kernel() {
   local value="${1:-}"
 
-  if [[ "${value}" == "unknown" || -z "${value}" ]]; then
+  if [[ -z "${value}" ]]; then
     echo "unknown"
   else
     echo "${value}"
-  fi
-}
-
-format_size() {
-  local file="${1:-}"
-
-  if command -v numfmt >/dev/null 2>&1; then
-    stat -c '%s' "${file}" | numfmt --to=iec --suffix=B
-  else
-    ls -lh "${file}" | awk '{print $5}'
   fi
 }
 
@@ -164,44 +152,6 @@ render_plugins_table() {
   done
 }
 
-render_assets_table() {
-  echo "| 文件 | 大小 | SHA256 |"
-  echo "|---|---:|---|"
-
-  shopt -s nullglob
-  local file name size sha
-
-  while read -r sha name; do
-    file="${ROM_DIR}/${name}"
-
-    if [[ ! -f "${file}" ]]; then
-      continue
-    fi
-
-    size="$(format_size "${file}")"
-
-    echo "| \`${name}\` | ${size} | \`${sha}\` |"
-  done < <(cd "${ROM_DIR}" && sha256sum $(find . -maxdepth 1 -type f ! -name 'sha256sums.txt' -printf '%f\n' | sort))
-}
-
-render_asset_list() {
-  shopt -s nullglob
-
-  local file name size
-
-  for file in "${ROM_DIR}"/*; do
-    [[ -f "${file}" ]] || continue
-    name="$(basename "${file}")"
-
-    if [[ "${name}" == "sha256sums.txt" ]]; then
-      continue
-    fi
-
-    size="$(format_size "${file}")"
-    echo "- \`${name}\` - ${size}"
-  done
-}
-
 GCC_DISPLAY="$(format_gcc "${GCC_VERSION}")"
 KERNEL_DISPLAY="$(format_kernel "${KERNEL_VERSION}")"
 DOCKER_DISPLAY="$(format_bool "${DOCKER}")"
@@ -210,16 +160,18 @@ ROOT_PASSWORD_DISPLAY="$(format_root_password "${ROOT_PASSWORD}")"
 SOURCE_LINE=""
 if [[ -n "${SOURCE_REPO}" ]]; then
   SOURCE_LINE="${SOURCE_REPO}"
+
   if [[ -n "${SOURCE_BRANCH}" ]]; then
     SOURCE_LINE="${SOURCE_LINE}@${SOURCE_BRANCH}"
   fi
+
   if [[ -n "${SOURCE_COMMIT}" ]]; then
     SOURCE_LINE="${SOURCE_LINE} (${SOURCE_COMMIT})"
   fi
 fi
 
 {
-  echo "# 🎉 OpenWrt 固件发布"
+  echo "# 🎉 ${RELEASE_TITLE}"
   echo
   echo "> 请确认固件与设备型号匹配后再刷机。刷机有风险，操作需谨慎。"
   echo
@@ -240,17 +192,21 @@ fi
   echo "| 🐱 Mihomo 内核 | \`${MIHOMO_CORE}\` |"
   echo "| 🌍 默认 LAN | \`${LAN_ADDR}\` |"
   echo "| 🔑 默认密码 | \`${ROOT_PASSWORD_DISPLAY}\` |"
+
   if [[ -n "${SOURCE_LINE}" ]]; then
     echo "| 🔗 源码来源 | \`${SOURCE_LINE}\` |"
   fi
+
   if [[ -n "${CONFIG_FILE}" ]]; then
     echo "| ⚙️ 配置文件 | \`${CONFIG_FILE}\` |"
   fi
+
   echo
   echo "---"
   echo
   echo "## ⚙️ 构建选项"
   echo
+
   if [[ -n "${BUILD_OPTIONS}" ]]; then
     echo '```text'
     echo "${BUILD_OPTIONS}"
@@ -258,6 +214,7 @@ fi
   else
     echo "> 未提供额外构建选项。"
   fi
+
   echo
   echo "---"
   echo
@@ -282,6 +239,7 @@ fi
   echo
   echo "### 构建选项"
   echo
+
   if [[ -n "${BUILD_OPTIONS}" ]]; then
     echo '```text'
     echo "${BUILD_OPTIONS}"
