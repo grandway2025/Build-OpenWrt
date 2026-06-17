@@ -38,7 +38,6 @@ mkdir -p "${ROM_DIR}" "${INFO_DIR}"
 
 INFO_MD="${INFO_DIR}/info.md"
 SUMMARY_MD="${INFO_DIR}/summary.md"
-SHA_FILE="${ROM_DIR}/sha256sums.txt"
 
 OPENWRT_VERSION="${OPENWRT_VERSION:-OpenWrt}"
 BUILD_TIME="${BUILD_TIME:-$(date -u '+%Y-%m-%d %H:%M:%S UTC')}"
@@ -163,34 +162,6 @@ format_size() {
   fi
 }
 
-make_sha256() {
-  : > "${SHA_FILE}"
-
-  shopt -s nullglob
-  local files=("${ROM_DIR}"/*)
-
-  if [[ "${#files[@]}" -eq 0 ]]; then
-    echo "::error::No firmware files found in ${ROM_DIR}" >&2
-    exit 1
-  fi
-
-  for file in "${files[@]}"; do
-    [[ -f "${file}" ]] || continue
-
-    # 避免重复把 sha256sums.txt 自己写进去
-    if [[ "$(basename "${file}")" == "sha256sums.txt" ]]; then
-      continue
-    fi
-
-    sha256sum "${file}" >> "${SHA_FILE}"
-  done
-
-  if [[ ! -s "${SHA_FILE}" ]]; then
-    echo "::error::No valid files for sha256 generation." >&2
-    exit 1
-  fi
-}
-
 render_plugins_table() {
   echo "| 插件 | 状态 |"
   echo "|---|---|"
@@ -254,8 +225,6 @@ render_asset_list() {
   done
 }
 
-make_sha256
-
 GCC_DISPLAY="$(format_gcc "${GCC_VERSION}")"
 KERNEL_DISPLAY="$(format_kernel "${KERNEL_VERSION}")"
 DOCKER_DISPLAY="$(format_bool "${DOCKER}")"
@@ -294,81 +263,30 @@ fi
   echo "| 🐱 Mihomo 内核 | \`${MIHOMO_CORE}\` |"
   echo "| 🌍 默认 LAN | \`${LAN_ADDR}\` |"
   echo "| 🔑 默认密码 | \`${ROOT_PASSWORD_DISPLAY}\` |"
-
   if [[ -n "${SOURCE_LINE}" ]]; then
     echo "| 🔗 源码来源 | \`${SOURCE_LINE}\` |"
   fi
-
   if [[ -n "${CONFIG_FILE}" ]]; then
     echo "| ⚙️ 配置文件 | \`${CONFIG_FILE}\` |"
   fi
-
   echo
   echo "---"
   echo
   echo "## ⚙️ 构建选项"
   echo
   if [[ -n "${BUILD_OPTIONS}" ]]; then
-    echo
     echo '```text'
     echo "${BUILD_OPTIONS}"
     echo '```'
   else
-    echo
     echo "> 未提供额外构建选项。"
   fi
-
   echo
   echo "---"
   echo
   echo "## 📦 已编译插件"
   echo
-  echo
   render_plugins_table
-
-  echo
-  echo "---"
-  echo
-  echo "## 🔐 固件校验信息"
-  echo
-  echo
-  echo "以下 SHA256 可用于下载后校验固件完整性。"
-  echo
-  echo
-  render_assets_table
-
-  echo
-  echo
-  echo "<details>"
-  echo "<summary>展开 sha256sums.txt</summary>"
-  echo
-  echo '```text'
-  cat "${SHA_FILE}"
-  echo '```'
-  echo
-  echo "</details>"
-
-  echo
-  echo "---"
-  echo
-  echo "## 🧾 固件文件"
-  echo
-  echo
-  render_asset_list
-
-  echo
-  echo "---"
-  echo
-  echo "## 💡 使用提示"
-  echo
-  echo
-  echo "- 默认管理地址：\`http://${LAN_ADDR}\`"
-  echo "- 默认密码：\`${ROOT_PASSWORD_DISPLAY}\`"
-  echo "- 建议刷机前备份当前配置。"
-  echo "- 如果是首次刷入，建议使用 factory / combined 类型镜像。"
-  echo "- 如果是系统内升级，建议使用 sysupgrade 类型镜像。"
-  echo
-  echo "> ⚠️ 刷机有风险，请确认固件、设备型号、分区布局匹配后再操作。"
 } > "${INFO_MD}"
 
 {
@@ -378,23 +296,24 @@ fi
   echo "|---|---|"
   echo "| 版本 | \`${OPENWRT_VERSION}\` |"
   echo "| 设备 | \`${DEVICE}\` |"
+  echo "| Target | \`${TARGET}\` |"
   echo "| 内核 | \`${KERNEL_DISPLAY}\` |"
   echo "| GCC | \`${GCC_DISPLAY}\` |"
   echo "| LAN | \`${LAN_ADDR}\` |"
   echo "| Docker | \`${DOCKER_DISPLAY}\` |"
+  echo "| Mihomo | \`${MIHOMO_CORE}\` |"
   echo
-  echo "### 固件文件"
+  echo "### 构建选项"
   echo
-  render_asset_list
-  echo
-  echo "### SHA256"
-  echo
-  echo '```text'
-  cat "${SHA_FILE}"
-  echo '```'
+  if [[ -n "${BUILD_OPTIONS}" ]]; then
+    echo '```text'
+    echo "${BUILD_OPTIONS}"
+    echo '```'
+  else
+    echo "> 未提供额外构建选项。"
+  fi
 } > "${SUMMARY_MD}"
 
 echo "Generated release info:"
 echo "  ${INFO_MD}"
 echo "  ${SUMMARY_MD}"
-echo "  ${SHA_FILE}"
