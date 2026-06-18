@@ -16,8 +16,7 @@ LICENSE
 # /xray-core/
 /files/
 /openwrt/scripts/
+/scripts/
 # --- [模板] 未来要保护新目录，复制下行去掉 # 即可 ---
 # /sing-box/
-# /v2ray-core/
-# /trojan-plus/
-# /shadow-tls/
+
