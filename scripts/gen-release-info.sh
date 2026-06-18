@@ -18,52 +18,30 @@ SUMMARY_MD="${INFO_DIR}/summary.md"
 OPENWRT_VERSION="${OPENWRT_VERSION:-OpenWrt}"
 BUILD_TIME="${BUILD_TIME:-$(date -u '+%Y-%m-%d %H:%M:%S UTC')}"
 DEVICE="${DEVICE:-unknown}"
-TARGET="${TARGET:-${DEVICE}}"
 KERNEL_VERSION="${KERNEL_VERSION:-unknown}"
 GCC_VERSION="${GCC_VERSION:-unknown}"
 WEB_SERVER="${WEB_SERVER:-unknown}"
-DOCKER="${DOCKER:-auto}"
 MIHOMO_CORE="${MIHOMO_CORE:-unknown}"
 LAN_ADDR="${LAN_ADDR:-192.168.1.1}"
 ROOT_PASSWORD="${ROOT_PASSWORD:-}"
 BUILD_OPTIONS="${BUILD_OPTIONS:-}"
 RELEASE_TITLE="${RELEASE_TITLE:-OpenWrt 固件发布}"
-SOURCE_REPO="${SOURCE_REPO:-}"
-SOURCE_BRANCH="${SOURCE_BRANCH:-}"
-SOURCE_COMMIT="${SOURCE_COMMIT:-}"
 CONFIG_FILE="${CONFIG_FILE:-}"
 
 # 插件列表。
 # 格式支持：
-#   PLUGINS="Docker=true PassWall=true OpenClash=false"
+#   PLUGINS="Docker=true Docker管理=true PassWall=true OpenClash=false"
 # 或：
 #   PLUGINS="Docker Docker管理 PassWall OpenClash Mihomo_Nikki MosDNS OpenAppFilter UPnP TTYD Argon"
-PLUGINS="${PLUGINS:-Docker=true Docker管理=true PassWall=true OpenClash=true Mihomo_Nikki=true MosDNS=true OpenAppFilter=true UPnP=true TTYD终端=true Argon主题=true}"
+#
+# 默认使用 auto，避免未检测时误显示“已编译”。
+PLUGINS="${PLUGINS:-Docker=auto Docker管理=auto PassWall=auto OpenClash=auto Mihomo_Nikki=auto MosDNS=auto OpenAppFilter=auto UPnP=auto TTYD终端=auto Argon主题=auto}"
 
 escape_md() {
-  local s="${1:-}"
-  s="${s//\\/\\\\}"
-  s="${s//|/\\|}"
-  echo "${s}"
-}
-
-format_bool() {
   local value="${1:-}"
-
-  case "${value}" in
-    true|TRUE|yes|YES|y|Y|1|enable|enabled|ENABLE|ENABLED|on|ON)
-      echo "已启用"
-      ;;
-    false|FALSE|no|NO|n|N|0|disable|disabled|DISABLE|DISABLED|off|OFF)
-      echo "未启用"
-      ;;
-    auto|AUTO|"")
-      echo "自动"
-      ;;
-    *)
-      echo "${value}"
-      ;;
-  esac
+  value="${value//\\/\\\\}"
+  value="${value//|/\\|}"
+  echo "${value}"
 }
 
 format_compile_status() {
@@ -99,17 +77,14 @@ format_gcc() {
   local value="${1:-}"
 
   case "${value}" in
+    GCC16|gcc16|16)
+      echo "GCC 16"
+      ;;
     GCC15|gcc15|15)
       echo "GCC 15"
       ;;
     GCC14|gcc14|14)
       echo "GCC 14"
-      ;;
-    GCC13|gcc13|13)
-      echo "GCC 13"
-      ;;
-    GCC12|gcc12|12)
-      echo "GCC 12"
       ;;
     *)
       echo "${value}"
@@ -134,9 +109,9 @@ render_plugins_table() {
   local item name value display_name status
 
   # shellcheck disable=SC2206
-  local arr=(${PLUGINS})
+  local plugins_array=(${PLUGINS})
 
-  for item in "${arr[@]}"; do
+  for item in "${plugins_array[@]}"; do
     if [[ "${item}" == *"="* ]]; then
       name="${item%%=*}"
       value="${item#*=}"
@@ -154,21 +129,7 @@ render_plugins_table() {
 
 GCC_DISPLAY="$(format_gcc "${GCC_VERSION}")"
 KERNEL_DISPLAY="$(format_kernel "${KERNEL_VERSION}")"
-DOCKER_DISPLAY="$(format_bool "${DOCKER}")"
 ROOT_PASSWORD_DISPLAY="$(format_root_password "${ROOT_PASSWORD}")"
-
-SOURCE_LINE=""
-if [[ -n "${SOURCE_REPO}" ]]; then
-  SOURCE_LINE="${SOURCE_REPO}"
-
-  if [[ -n "${SOURCE_BRANCH}" ]]; then
-    SOURCE_LINE="${SOURCE_LINE}@${SOURCE_BRANCH}"
-  fi
-
-  if [[ -n "${SOURCE_COMMIT}" ]]; then
-    SOURCE_LINE="${SOURCE_LINE} (${SOURCE_COMMIT})"
-  fi
-fi
 
 {
   echo "# 🎉 ${RELEASE_TITLE}"
@@ -184,18 +145,12 @@ fi
   echo "| 🏷️ 版本 | \`${OPENWRT_VERSION}\` |"
   echo "| 📅 编译时间 | \`${BUILD_TIME}\` |"
   echo "| 🎯 目标设备 | \`${DEVICE}\` |"
-  echo "| 🧩 Target | \`${TARGET}\` |"
   echo "| 🐧 内核版本 | \`${KERNEL_DISPLAY}\` |"
   echo "| 🛠️ GCC 版本 | \`${GCC_DISPLAY}\` |"
   echo "| 🌐 Web 服务 | \`${WEB_SERVER}\` |"
-  echo "| 🐳 Docker | \`${DOCKER_DISPLAY}\` |"
   echo "| 🐱 Mihomo 内核 | \`${MIHOMO_CORE}\` |"
   echo "| 🌍 默认 LAN | \`${LAN_ADDR}\` |"
   echo "| 🔑 默认密码 | \`${ROOT_PASSWORD_DISPLAY}\` |"
-
-  if [[ -n "${SOURCE_LINE}" ]]; then
-    echo "| 🔗 源码来源 | \`${SOURCE_LINE}\` |"
-  fi
 
   if [[ -n "${CONFIG_FILE}" ]]; then
     echo "| ⚙️ 配置文件 | \`${CONFIG_FILE}\` |"
@@ -230,11 +185,10 @@ fi
   echo "|---|---|"
   echo "| 版本 | \`${OPENWRT_VERSION}\` |"
   echo "| 设备 | \`${DEVICE}\` |"
-  echo "| Target | \`${TARGET}\` |"
   echo "| 内核 | \`${KERNEL_DISPLAY}\` |"
   echo "| GCC | \`${GCC_DISPLAY}\` |"
+  echo "| Web 服务 | \`${WEB_SERVER}\` |"
   echo "| LAN | \`${LAN_ADDR}\` |"
-  echo "| Docker | \`${DOCKER_DISPLAY}\` |"
   echo "| Mihomo | \`${MIHOMO_CORE}\` |"
   echo
   echo "### 构建选项"
@@ -247,6 +201,11 @@ fi
   else
     echo "> 未提供额外构建选项。"
   fi
+
+  echo
+  echo "### 已编译插件"
+  echo
+  render_plugins_table
 } > "${SUMMARY_MD}"
 
 echo "Generated release info:"
