@@ -239,32 +239,51 @@ jobs:
         INFO_DIR: /builder/info
         OPENWRT_VERSION: ${{ env.latest_release }}
         DEVICE: ${{ github.event.inputs.device }}
-        TARGET: ${{ github.event.inputs.device }}
         WEB_SERVER: unknown
-        DOCKER: auto
         MIHOMO_CORE: ${{ github.event.inputs.mihomo_core }}
         GCC_VERSION: ${{ github.event.inputs.gcc_version }}
         LAN_ADDR: ${{ github.event.inputs.lan_addr }}
         ROOT_PASSWORD: ${{ github.event.inputs.root_password }}
         BUILD_OPTIONS: ${{ github.event.inputs.build_options }}
         RELEASE_TITLE: ${{ env.latest_release }}
-        SOURCE_REPO: ${{ github.repository }}
-        SOURCE_BRANCH: ${{ github.ref_name }}
-        SOURCE_COMMIT: ${{ github.sha }}
       run: |
         set -e
         export BUILD_TIME="$(date '+%Y-%m-%d %H:%M:%S %Z')"
+        config_file="/builder/info/config.buildinfo"
+        manifest_file="/builder/info/manifest.txt"
         selected_gcc="${GCC_VERSION:-${{ github.event.inputs.gcc_version }}}"
-        if [ -f /builder/info/config.buildinfo ]; then
-          export KERNEL_VERSION="$(grep -E '^CONFIG_LINUX_[0-9]+_[0-9]+=' /builder/info/config.buildinfo | sed -E 's/CONFIG_LINUX_([0-9]+)_([0-9]+)=y/\1.\2/' | head -1 || true)"
-          detected_gcc="$(grep -E '^CONFIG_GCC_VERSION=' /builder/info/config.buildinfo | cut -d '"' -f2 | head -1 || true)"
+        if [ -f "${config_file}" ]; then
+          detected_kernel="$(sed -nE 's/^CONFIG_LINUX_([0-9]+)_([0-9]+)=y$/\1.\2/p' "${config_file}" | head -1 || true)"
+          detected_gcc="$(grep -E '^CONFIG_GCC_VERSION=' "${config_file}" | cut -d '"' -f2 | head -1 || true)"
           if [ -z "${detected_gcc}" ]; then
-            detected_gcc="$(sed -nE 's/^CONFIG_GCC_VERSION_([0-9]+)=y$/GCC\1/p' /builder/info/config.buildinfo | head -1 || true)"
+            detected_gcc="$(sed -nE 's/^CONFIG_GCC_VERSION_([0-9]+)=y$/GCC\1/p' "${config_file}" | head -1 || true)"
           fi
+          [ -n "${detected_kernel}" ] && export KERNEL_VERSION="${detected_kernel}"
           [ -n "${detected_gcc}" ] && export GCC_VERSION="${detected_gcc}" || export GCC_VERSION="${selected_gcc}"
+        fi
+        if [ -f "${manifest_file}" ]; then
+          manifest_kernel="$(awk '$1 == "kernel" && $2 == "-" {print $3; exit}' "${manifest_file}" | sed -E 's/[~-].*$//' || true)"
+          [ -z "${KERNEL_VERSION:-}" ] && [ -n "${manifest_kernel}" ] && export KERNEL_VERSION="${manifest_kernel}"
+          if grep -Eq '^(nginx|nginx-ssl|luci-ssl-nginx) - ' "${manifest_file}"; then
+            export WEB_SERVER="nginx"
+          elif grep -Eq '^(uhttpd|uhttpd-mod-ubus|luci-ssl|luci-ssl-openssl) - ' "${manifest_file}"; then
+            export WEB_SERVER="uhttpd"
+          else
+            export WEB_SERVER="unknown"
+          fi
+          plugin_status() {
+            local package_pattern="$1"
+            if grep -Eq "^(${package_pattern}) - " "${manifest_file}"; then
+              echo "true"
+            else
+              echo "false"
+            fi
+          }
+          export PLUGINS="Docker=$(plugin_status 'dockerd|docker|luci-app-dockerman') Docker管理=$(plugin_status 'luci-app-dockerman') PassWall=$(plugin_status 'luci-app-passwall|luci-app-passwall2') OpenClash=$(plugin_status 'luci-app-openclash') Mihomo_Nikki=$(plugin_status 'luci-app-mihomo|luci-app-nikki') MosDNS=$(plugin_status 'luci-app-mosdns|mosdns') OpenAppFilter=$(plugin_status 'luci-app-oaf|oaf') UPnP=$(plugin_status 'luci-app-upnp|miniupnpd') TTYD终端=$(plugin_status 'luci-app-ttyd|ttyd') Argon主题=$(plugin_status 'luci-theme-argon')"
         fi
         export KERNEL_VERSION="${KERNEL_VERSION:-unknown}"
         export GCC_VERSION="${GCC_VERSION:-${selected_gcc:-unknown}}"
+        export WEB_SERVER="${WEB_SERVER:-unknown}"
         chmod +x "${GITHUB_WORKSPACE}/r4s_build_script/scripts/gen-release-info.sh"
         "${GITHUB_WORKSPACE}/r4s_build_script/scripts/gen-release-info.sh"
         cat /builder/info/summary.md >> "$GITHUB_STEP_SUMMARY"
