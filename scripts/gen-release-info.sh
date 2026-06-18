@@ -30,12 +30,12 @@ CONFIG_FILE="${CONFIG_FILE:-}"
 
 # 插件列表。
 # 格式支持：
-#   PLUGINS="Docker=true Docker管理=true PassWall=true OpenClash=false"
+#   PLUGINS="Docker=true PassWall=true OpenClash=false"
 # 或：
-#   PLUGINS="Docker Docker管理 PassWall OpenClash Mihomo_Nikki MosDNS OpenAppFilter UPnP TTYD Argon"
+#   PLUGINS="Docker PassWall OpenClash Mihomo_Nikki MosDNS OpenAppFilter UPnP TTYD Argon"
 #
 # 默认使用 auto，避免未检测时误显示“已编译”。
-PLUGINS="${PLUGINS:-Docker=auto Docker管理=auto PassWall=auto OpenClash=auto Mihomo_Nikki=auto MosDNS=auto OpenAppFilter=auto UPnP=auto TTYD终端=auto Argon主题=auto}"
+PLUGINS="${PLUGINS:-Docker=auto PassWall=auto OpenClash=auto Mihomo_Nikki=auto MosDNS=auto OpenAppFilter=auto UPnP=auto TTYD终端=auto Argon主题=auto}"
 
 escape_md() {
   local value="${1:-}"
@@ -102,6 +102,14 @@ format_kernel() {
   fi
 }
 
+# 去掉编译时间结尾的时区缩写（如 CST、UTC、GMT 等），只保留日期时间
+format_build_time() {
+  local value="${1:-}"
+  # 去除结尾的 " XXX"（一个或多个字母组成的时区缩写）及其前置空白
+  value="$(echo "${value}" | sed -E 's/[[:space:]]+[A-Za-z]{2,5}$//')"
+  echo "${value}"
+}
+
 render_plugins_table() {
   echo "| 插件 | 状态 |"
   echo "|---|---|"
@@ -130,11 +138,12 @@ render_plugins_table() {
 GCC_DISPLAY="$(format_gcc "${GCC_VERSION}")"
 KERNEL_DISPLAY="$(format_kernel "${KERNEL_VERSION}")"
 ROOT_PASSWORD_DISPLAY="$(format_root_password "${ROOT_PASSWORD}")"
+BUILD_TIME_DISPLAY="$(format_build_time "${BUILD_TIME}")"
 
 {
   echo "# 🎉 ${RELEASE_TITLE}"
   echo
-  echo "> 请确认固件与设备型号匹配后再刷机。刷机有风险，操作需谨慎。"
+  echo "> 请确认固件与设备型号匹配后再刷机，刷机有风险，操作需谨慎!"
   echo
   echo "---"
   echo
@@ -143,7 +152,7 @@ ROOT_PASSWORD_DISPLAY="$(format_root_password "${ROOT_PASSWORD}")"
   echo "| 项目 | 值 |"
   echo "|---|---|"
   echo "| 🏷️ 版本 | \`${OPENWRT_VERSION}\` |"
-  echo "| 📅 编译时间 | \`${BUILD_TIME}\` |"
+  echo "| 📅 编译时间 | \`${BUILD_TIME_DISPLAY}\` |"
   echo "| 🎯 目标设备 | \`${DEVICE}\` |"
   echo "| 🐧 内核版本 | \`${KERNEL_DISPLAY}\` |"
   echo "| 🛠️ GCC 版本 | \`${GCC_DISPLAY}\` |"
