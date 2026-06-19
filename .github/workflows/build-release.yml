@@ -86,6 +86,7 @@ jobs:
         git config --global user.name 'actions'
         git config --global user.email 'action@github.com'
         echo build_dir="/builder" >> "$GITHUB_ENV"
+        [ "${{ github.event.inputs.version }}" = release ] && echo build_version="rc2" >> "$GITHUB_ENV" || echo build_version="dev" >> "$GITHUB_ENV"
         echo release_suffix="" >> "$GITHUB_ENV"
         echo release_name_suffix="" >> "$GITHUB_ENV"
         [ "${{ github.event.inputs.build_type }}" = "minimal" ] && echo release_suffix="-minimal" >> "$GITHUB_ENV" && echo release_name_suffix=" Minimal" >> "$GITHUB_ENV"
@@ -162,7 +163,7 @@ jobs:
         [ "${{ github.event.inputs.build_type }}" = "standard" ] && export STD_BUILD=y
         [ "${{ github.event.inputs.ccache }}" = 'true' ] && export ENABLE_CCACHE=y
         [ -n "${{ github.event.inputs.root_password }}" ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
-        bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ env.build_version }} ${{ github.event.inputs.device }}
+        bash <(curl -sS http://127.0.0.1:8080/build.sh) ${build_version} ${{ github.event.inputs.device }}
         cd openwrt
         if [ "${{ github.event.inputs.version }}" = release ]; then
           tags=OpenWrt-$(git describe --abbrev=0 --tags)
@@ -259,7 +260,7 @@ jobs:
         LAN_ADDR: ${{ github.event.inputs.lan_addr }}
         ROOT_PASSWORD: ${{ github.event.inputs.root_password }}
         BUILD_OPTIONS: ${{ github.event.inputs.build_options }} BUILD_TYPE=${{ github.event.inputs.build_type }}
-        RELEASE_TITLE: ${{ env.latest_release }}
+        RELEASE_TITLE: ${{ env.latest_release }}${{ env.release_name_suffix }}
       run: |
         set -e
         export BUILD_TIME="$(date '+%Y-%m-%d %H:%M:%S %Z')"
