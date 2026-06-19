@@ -89,8 +89,8 @@ jobs:
         [ "${{ github.event.inputs.version }}" = "release" ] && echo "build_version=rc2" >> "$GITHUB_ENV" || echo "build_version=dev" >> "$GITHUB_ENV"
         echo "release_suffix=" >> "$GITHUB_ENV"
         echo "release_name_suffix=" >> "$GITHUB_ENV"
-        [ "${{ github.event.inputs.build_type }}" = "minimal" ] && echo "release_suffix=-minimal" >> "$GITHUB_ENV" && echo "release_name_suffix= Minimal" >> "$GITHUB_ENV"
-        [ "${{ github.event.inputs.build_type }}" = "standard" ] && echo "release_suffix=-standard" >> "$GITHUB_ENV" && echo "release_name_suffix= Standard" >> "$GITHUB_ENV"
+        [ "${{ github.event.inputs.build_type }}" = "minimal" ] && echo "release_suffix=-minimal" >> "$GITHUB_ENV" && echo "release_name_suffix= Minimal" >> "$GITHUB_ENV" || true
+        [ "${{ github.event.inputs.build_type }}" = "standard" ] && echo "release_suffix=-standard" >> "$GITHUB_ENV" && echo "release_name_suffix= Standard" >> "$GITHUB_ENV" || true
     
     - name: Show system
       run: |
