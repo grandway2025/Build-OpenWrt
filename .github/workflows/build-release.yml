@@ -297,10 +297,10 @@ jobs:
           export PLUGINS="\
           Docker=$(plugin_status 'dockerd|docker|luci-app-dockerman') \
           PassWall=$(plugin_status 'luci-app-passwall|luci-app-passwall2') \
-          adguardhome=$(plugin_status 'luci-app-adguardhome|adguardhome') \
           OpenClash=$(plugin_status 'luci-app-openclash') \
           Mihomo_Nikki=$(plugin_status 'luci-app-mihomo|luci-app-nikki') \
           MosDNS=$(plugin_status 'luci-app-mosdns|mosdns') \
+          adguardhome=$(plugin_status 'luci-app-adguardhome|adguardhome') \
           OpenAppFilter=$(plugin_status 'luci-app-oaf|oaf') \
           UPnP=$(plugin_status 'luci-app-upnp|miniupnpd') \
           TTYD终端=$(plugin_status 'luci-app-ttyd|ttyd') \
