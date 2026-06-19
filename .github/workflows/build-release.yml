@@ -22,6 +22,15 @@ on:
         options:
           - 'release'
           - 'snapshot-25.12'
+      build_type:
+        description: 'Select the build type'
+        required: true
+        default: 'default'
+        type: choice
+        options:
+          - 'default'
+          - 'minimal'
+          - 'standard'
       ccache:
         description: 'Enable ccache (Use Cache to speed up next build)'
         type: boolean
@@ -77,8 +86,11 @@ jobs:
         git config --global user.name 'actions'
         git config --global user.email 'action@github.com'
         echo build_dir="/builder" >> "$GITHUB_ENV"
-        [ "${{ github.event.inputs.version }}" = release ] && echo build_version="rc2" >> "$GITHUB_ENV" || echo build_version="dev" >> "$GITHUB_ENV"
-
+        echo release_suffix="" >> "$GITHUB_ENV"
+        echo release_name_suffix="" >> "$GITHUB_ENV"
+        [ "${{ github.event.inputs.build_type }}" = "minimal" ] && echo release_suffix="-minimal" >> "$GITHUB_ENV" && echo release_name_suffix=" Minimal" >> "$GITHUB_ENV"
+        [ "${{ github.event.inputs.build_type }}" = "standard" ] && echo release_suffix="-standard" >> "$GITHUB_ENV" && echo release_name_suffix=" Standard" >> "$GITHUB_ENV"
+    
     - name: Show system
       run: |
         echo -e "\n\e[1;32mCPU:\e[0m"
@@ -146,6 +158,8 @@ jobs:
       run: |
         export ${{ github.event.inputs.build_options }} LAN="${{ github.event.inputs.lan_addr }}" USE_${{ github.event.inputs.gcc_version }}=y
         export mihomo_core="${{ github.event.inputs.mihomo_core }}"
+        [ "${{ github.event.inputs.build_type }}" = "minimal" ] && export MINIMAL_BUILD=y
+        [ "${{ github.event.inputs.build_type }}" = "standard" ] && export STD_BUILD=y
         [ "${{ github.event.inputs.ccache }}" = 'true' ] && export ENABLE_CCACHE=y
         [ -n "${{ github.event.inputs.root_password }}" ] && export ROOT_PASSWORD="${{ github.event.inputs.root_password }}"
         bash <(curl -sS http://127.0.0.1:8080/build.sh) ${{ env.build_version }} ${{ github.event.inputs.device }}
@@ -244,7 +258,7 @@ jobs:
         GCC_VERSION: ${{ github.event.inputs.gcc_version }}
         LAN_ADDR: ${{ github.event.inputs.lan_addr }}
         ROOT_PASSWORD: ${{ github.event.inputs.root_password }}
-        BUILD_OPTIONS: ${{ github.event.inputs.build_options }}
+        BUILD_OPTIONS: ${{ github.event.inputs.build_options }} BUILD_TYPE=${{ github.event.inputs.build_type }}
         RELEASE_TITLE: ${{ env.latest_release }}
       run: |
         set -e
@@ -300,7 +314,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@main
       with:
-        name: ${{ github.event.inputs.device }}-openwrt-${{ env.latest_release }}
+        name: ${{ github.event.inputs.device }}-openwrt-${{ env.latest_release }}${{ env.release_suffix }}
         path: |
           ${{ env.build_dir }}/rom/*
           ${{ env.build_dir }}/info/*
@@ -309,9 +323,9 @@ jobs:
       continue-on-error: true
       uses: ncipollo/release-action@main
       with:
-        name: ${{ env.latest_release }}
+        name: ${{ env.latest_release }}${{ env.release_name_suffix }}
         allowUpdates: true
-        tag: ${{ env.latest_release }}
+        tag: ${{ env.latest_release }}${{ env.release_suffix }}
         commit: ${{ github.ref_name }}
         replacesArtifacts: true
         token: ${{ secrets.GITHUB_TOKEN }}
