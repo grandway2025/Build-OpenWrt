@@ -297,6 +297,7 @@ jobs:
           export PLUGINS="\
           Docker=$(plugin_status 'dockerd|docker|luci-app-dockerman') \
           PassWall=$(plugin_status 'luci-app-passwall|luci-app-passwall2') \
+          adguardhome=$(plugin_status 'luci-app-adguardhome|adguardhome') \
           OpenClash=$(plugin_status 'luci-app-openclash') \
           Mihomo_Nikki=$(plugin_status 'luci-app-mihomo|luci-app-nikki') \
           MosDNS=$(plugin_status 'luci-app-mosdns|mosdns') \
