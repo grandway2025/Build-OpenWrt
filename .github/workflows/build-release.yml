@@ -279,7 +279,16 @@ jobs:
               echo "false"
             fi
           }
-          export PLUGINS="Docker=$(plugin_status 'dockerd|docker|luci-app-dockerman') Docker管理=$(plugin_status 'luci-app-dockerman') PassWall=$(plugin_status 'luci-app-passwall|luci-app-passwall2') OpenClash=$(plugin_status 'luci-app-openclash') Mihomo_Nikki=$(plugin_status 'luci-app-mihomo|luci-app-nikki') MosDNS=$(plugin_status 'luci-app-mosdns|mosdns') OpenAppFilter=$(plugin_status 'luci-app-oaf|oaf') UPnP=$(plugin_status 'luci-app-upnp|miniupnpd') TTYD终端=$(plugin_status 'luci-app-ttyd|ttyd') Argon主题=$(plugin_status 'luci-theme-argon')"
+          export PLUGINS="\
+          Docker=$(plugin_status 'dockerd|docker|luci-app-dockerman') \
+          PassWall=$(plugin_status 'luci-app-passwall|luci-app-passwall2') \
+          OpenClash=$(plugin_status 'luci-app-openclash') \
+          Mihomo_Nikki=$(plugin_status 'luci-app-mihomo|luci-app-nikki') \
+          MosDNS=$(plugin_status 'luci-app-mosdns|mosdns') \
+          OpenAppFilter=$(plugin_status 'luci-app-oaf|oaf') \
+          UPnP=$(plugin_status 'luci-app-upnp|miniupnpd') \
+          TTYD终端=$(plugin_status 'luci-app-ttyd|ttyd') \
+          Argon主题=$(plugin_status 'luci-theme-argon')"
         fi
         export KERNEL_VERSION="${KERNEL_VERSION:-unknown}"
         export GCC_VERSION="${GCC_VERSION:-${selected_gcc:-unknown}}"
