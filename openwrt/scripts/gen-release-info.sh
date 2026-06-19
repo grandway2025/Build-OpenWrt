@@ -113,12 +113,10 @@ format_build_time() {
 render_plugins_table() {
   echo "| 插件 | 状态 |"
   echo "|---|---|"
-
-  local item name value display_name status
-
+  local item name value display_name plugin_count
+  plugin_count=0
   # shellcheck disable=SC2206
   local plugins_array=(${PLUGINS})
-
   for item in "${plugins_array[@]}"; do
     if [[ "${item}" == *"="* ]]; then
       name="${item%%=*}"
@@ -127,12 +125,17 @@ render_plugins_table() {
       name="${item}"
       value="true"
     fi
-
-    display_name="${name//_/ }"
-    status="$(format_compile_status "${value}")"
-
-    echo "| $(escape_md "${display_name}") | ${status} |"
+    case "${value}" in
+      true|TRUE|yes|YES|y|Y|1|enable|enabled|ENABLE|ENABLED|on|ON)
+        display_name="${name//_/ }"
+        echo "| $(escape_md "${display_name}") | ✅ 已编译 |"
+        plugin_count=$((plugin_count + 1))
+        ;;
+    esac
   done
+  if [[ "${plugin_count}" -eq 0 ]]; then
+    echo "| 无 | 未检测到已编译插件 |"
+  fi
 }
 
 GCC_DISPLAY="$(format_gcc "${GCC_VERSION}")"
