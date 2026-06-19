@@ -35,7 +35,7 @@ CONFIG_FILE="${CONFIG_FILE:-}"
 #   PLUGINS="Docker PassWall OpenClash Mihomo_Nikki MosDNS OpenAppFilter UPnP TTYD Argon"
 #
 # 默认使用 auto，避免未检测时误显示“已编译”。
-PLUGINS="${PLUGINS:-Docker=auto PassWall=auto OpenClash=auto Mihomo_Nikki=auto MosDNS=auto OpenAppFilter=auto UPnP=auto TTYD终端=auto Argon主题=auto}"
+PLUGINS="${PLUGINS:-Docker=auto PassWall=auto OpenClash=auto Mihomo_Nikki=auto MosDNS=auto OpenAppFilter=auto UPnP=auto adguardhome=auto TTYD终端=auto Argon主题=auto}"
 
 escape_md() {
   local value="${1:-}"
