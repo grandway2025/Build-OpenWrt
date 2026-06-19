@@ -293,8 +293,8 @@ jobs:
         export KERNEL_VERSION="${KERNEL_VERSION:-unknown}"
         export GCC_VERSION="${GCC_VERSION:-${selected_gcc:-unknown}}"
         export WEB_SERVER="${WEB_SERVER:-unknown}"
-        chmod +x "${GITHUB_WORKSPACE}/r4s_build_script/scripts/gen-release-info.sh"
-        "${GITHUB_WORKSPACE}/r4s_build_script/scripts/gen-release-info.sh"
+        chmod +x "${GITHUB_WORKSPACE}/r4s_build_script/openwrt/scripts/gen-release-info.sh"
+        "${GITHUB_WORKSPACE}/r4s_build_script/openwrt/scripts/gen-release-info.sh"
         cat /builder/info/summary.md >> "$GITHUB_STEP_SUMMARY"
         
     - name: Upload artifacts
