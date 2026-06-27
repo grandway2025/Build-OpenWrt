@@ -96,9 +96,6 @@ elif [ "$1" = "rc2" ]; then
     export version=rc2
 fi
 
-# lan
-[ -n "$LAN" ] && export LAN=$LAN || export LAN=192.168.1.10
-
 # mihomo_core (从环境变量读取，默认 meta)
 export mihomo_core="${mihomo_core:-meta}"
 
@@ -194,7 +191,7 @@ print_status() {
         echo -e "${GREEN_COLOR}${name}:${RES} ${false_color}false${RES}${newline}"
     fi
 }
-[ -n "$LAN" ] && echo -e "${GREEN_COLOR}LAN:${RES} $LAN" || echo -e "${GREEN_COLOR}LAN:${RES} 192.168.1.10"
+export LAN="${LAN:-192.168.1.10}" || echo -e "${GREEN_COLOR}LAN:${RES} $LAN"
 [ -n "$ROOT_PASSWORD" ] \
     && echo -e "${GREEN_COLOR}Default Password:${RES} ${BLUE_COLOR}$ROOT_PASSWORD${RES}" \
     || echo -e "${GREEN_COLOR}Default Password:${RES} (${YELLOW_COLOR}No password${RES})"
@@ -302,6 +299,10 @@ bash 05-fix-source.sh
 bash 06-prepare_adguard_core.sh
 bash 07-preset_mihomo_core.sh
 [ -f "10-custom.sh" ] && bash 10-custom.sh
+
+# 修改默认ip
+[ -n "$LAN" ] && sed -i -E "s/192\.168\.1\.(1|10)/$LAN/g" package/base-files/files/bin/config_generate
+
 find feeds -type f -name "*.orig" -exec rm -f {} \;
 [ "$(whoami)" = "runner" ] && endgroup
 
