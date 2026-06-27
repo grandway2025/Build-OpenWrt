@@ -191,7 +191,8 @@ print_status() {
         echo -e "${GREEN_COLOR}${name}:${RES} ${false_color}false${RES}${newline}"
     fi
 }
-export LAN="${LAN:-192.168.1.10}" || echo -e "${GREEN_COLOR}LAN:${RES} $LAN"
+export LAN="${LAN:-192.168.1.10}"
+echo -e "${GREEN_COLOR}LAN:${RES} $LAN"
 [ -n "$ROOT_PASSWORD" ] \
     && echo -e "${GREEN_COLOR}Default Password:${RES} ${BLUE_COLOR}$ROOT_PASSWORD${RES}" \
     || echo -e "${GREEN_COLOR}Default Password:${RES} (${YELLOW_COLOR}No password${RES})"
