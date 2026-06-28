@@ -97,7 +97,9 @@ elif [ "$1" = "rc2" ]; then
 fi
 
 # lan
-[ -n "$LAN" ] && export LAN="$LAN" || export LAN="192.168.1.10"
+export LAN="${LAN:-192.168.1.10}"
+export LAN_GATEWAY="${LAN_GATEWAY:-192.168.1.1}"
+export LAN_DNS="${LAN_DNS:-192.168.1.1}"
 
 # mihomo_core (从环境变量读取，默认 meta)
 export mihomo_core="${mihomo_core:-meta}"
@@ -194,7 +196,9 @@ print_status() {
         echo -e "${GREEN_COLOR}${name}:${RES} ${false_color}false${RES}${newline}"
     fi
 }
-[ -n "$LAN" ] && echo -e "${GREEN_COLOR}LAN:${RES} $LAN" || echo -e "${GREEN_COLOR}LAN:${RES} 192.168.1.10"
+echo -e "${GREEN_COLOR}LAN:${RES} $LAN"
+echo -e "${GREEN_COLOR}LAN Gateway:${RES} $LAN_GATEWAY"
+echo -e "${GREEN_COLOR}LAN DNS:${RES} $LAN_DNS"
 [ -n "$ROOT_PASSWORD" ] \
     && echo -e "${GREEN_COLOR}Default Password:${RES} ${BLUE_COLOR}$ROOT_PASSWORD${RES}" \
     || echo -e "${GREEN_COLOR}Default Password:${RES} (${YELLOW_COLOR}No password${RES})"
@@ -304,7 +308,19 @@ bash 07-preset_mihomo_core.sh
 [ -f "10-custom.sh" ] && bash 10-custom.sh
 find feeds -type f -name "*.orig" -exec rm -f {} \;
 [ "$(whoami)" = "runner" ] && endgroup
-
+echo -e "\n${GREEN_COLOR}Inject default network settings ...${RES}"
+echo -e "${GREEN_COLOR}LAN:${RES} ${LAN}"
+echo -e "${GREEN_COLOR}LAN_GATEWAY:${RES} ${LAN_GATEWAY}"
+echo -e "${GREEN_COLOR}LAN_DNS:${RES} ${LAN_DNS}"
+find . -type f -name "zzz-default-settings" -print -exec \
+    sed -i \
+        -e "s|__LAN_ADDR__|${LAN}|g" \
+        -e "s|__LAN_GATEWAY__|${LAN_GATEWAY}|g" \
+        -e "s|__LAN_DNS__|${LAN_DNS}|g" \
+        {} \;
+echo -e "\n${GREEN_COLOR}Check zzz-default-settings:${RES}"
+find . -type f -name "zzz-default-settings" -exec \
+    grep -n "LAN_ADDR\|LAN_GATEWAY\|LAN_DNS\|network.lan.ipaddr\|network.lan.gateway\|network.lan.dns" {} \; || true
 rm -f 0*-*.sh 10-custom.sh
 
 # Load devices Config
