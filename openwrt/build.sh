@@ -97,7 +97,8 @@ elif [ "$1" = "rc2" ]; then
 fi
 
 # lan
-[ -n "$LAN" ] && export LAN=$LAN || export LAN=192.168.1.10
+export LAN="${LAN:-192.168.1.10}"
+echo -e "${GREEN_COLOR}LAN:${RES} $LAN"
 
 # mihomo_core (从环境变量读取，默认 meta)
 export mihomo_core="${mihomo_core:-meta}"
