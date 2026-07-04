@@ -98,6 +98,7 @@ fi
 
 # lan
 export LAN="${LAN:-192.168.1.10}"
+export LAN_ADDR="${LAN_ADDR:-$LAN}"
 export LAN_GATEWAY="${LAN_GATEWAY:-192.168.1.1}"
 export LAN_DNS="${LAN_DNS:-192.168.1.1}"
 
