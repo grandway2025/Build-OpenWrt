@@ -139,8 +139,7 @@ sed -i 's/100/85/g' package/new/luci-app-aurora-config/root/usr/share/luci/menu.
 git clone https://$github/sbwml/luci-app-mosdns -b v5 package/new/mosdns --depth=1
 
 # OpenAppFilter
-git clone https://$github/destan19/OpenAppFilter --depth=1 package/new/OpenAppFilter -b master
-# git clone https://$github/sbwml/OpenAppFilter --depth=1 package/new/OpenAppFilter -b main
+git clone https://$github/sbwml/OpenAppFilter --depth=1 package/new/OpenAppFilter -b main
 
 # iperf3
 sed -i "s/D_GNU_SOURCE/D_GNU_SOURCE -funroll-loops/g" feeds/packages/net/iperf3/Makefile
