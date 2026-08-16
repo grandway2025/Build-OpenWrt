@@ -195,7 +195,7 @@ git clone https://$github/sbwml/feeds_packages_net_curl feeds/packages/net/curl
 rm -rf feeds/luci/applications/luci-app-dockerman
 git clone https://$github/sbwml/luci-app-dockerman -b openwrt-25.12 feeds/luci/applications/luci-app-dockerman
 rm -rf feeds/packages/utils/{docker,dockerd,containerd,runc}
-rm -rf package/feeds/packages/{docker,dockerd,containerd,runc}
+rm -rf package/feeds/packages/dockerd
 git clone https://$github/sbwml/packages_utils_docker feeds/packages/utils/docker
 git clone https://$github/sbwml/packages_utils_dockerd feeds/packages/utils/dockerd
 git clone https://$github/sbwml/packages_utils_containerd feeds/packages/utils/containerd
