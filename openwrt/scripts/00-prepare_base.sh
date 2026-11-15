@@ -41,7 +41,7 @@ sed -i '/"@OPENWRT": \[/a\\t\t"https://source.cooluc.com",' scripts/projectsmirr
 sed -i 's/noinitrd/noinitrd mitigations=off/g' target/linux/x86/image/grub-efi.cfg
 
 # default LAN IP
-sed -i "s/192\.168\.1\.1/${LAN}/g" package/base-files/files/bin/config_generate
+sed -i "s/192.168.1.1/$LAN/g" package/base-files/files/bin/config_generate
 
 # default password
 if [ -n "$ROOT_PASSWORD" ]; then
@@ -252,6 +252,7 @@ sed -i "s/procd_set_param stderr 1/procd_set_param stderr 0/g" feeds/packages/ne
 sed -i 's/threads = 1/threads = 2/g' feeds/packages/net/uwsgi/files-luci-support/luci-webui.ini
 sed -i 's/processes = 3/processes = 4/g' feeds/packages/net/uwsgi/files-luci-support/luci-webui.ini
 sed -i 's/cheaper = 1/cheaper = 2/g' feeds/packages/net/uwsgi/files-luci-support/luci-webui.ini
+sed -i 's/cheaper-initial = 1/cheaper-initial = 2/g' feeds/packages/net/uwsgi/files-luci-support/luci-webui.ini
 
 # rpcd - fix timeout
 sed -i 's/option timeout 30/option timeout 60/g' package/system/rpcd/files/rpcd.config

@@ -1,8 +1,8 @@
 #!/bin/bash -e
 
-# golang 1.26
+# golang 1.27
 rm -rf feeds/packages/lang/golang
-git clone https://$github/sbwml/packages_lang_golang -b 26.x feeds/packages/lang/golang
+git clone https://$github/sbwml/packages_lang_golang -b 27.x feeds/packages/lang/golang
 
 # rust
 rm -rf feeds/packages/lang/rust
@@ -13,7 +13,7 @@ rm -rf feeds/packages/lang/node
 git clone https://$github/sbwml/feeds_packages_lang_node feeds/packages/lang/node -b packages-25.12
 
 # default settings
-git clone https://$github/grandway2025/default-settings package/new/default-settings -b openwrt-25.12
+git clone https://$github/sbwml/default-settings package/new/default-settings -b openwrt-25.12
 
 # wwan
 git clone https://$github/sbwml/wwan-packages package/new/wwan --depth=1
@@ -135,6 +135,10 @@ git clone https://$github/eamonxg/luci-app-aurora-config package/new/luci-app-au
 rm -rf package/new/luci-theme-aurora/root/etc/uci-defaults
 sed -i 's/100/85/g' package/new/luci-app-aurora-config/root/usr/share/luci/menu.d/luci-app-aurora.json
 
+# luci-theme-bootstrap SPA
+rm -rf feeds/luci/themes/luci-theme-bootstrap
+git clone https://$github/sbwml/luci-theme-bootstrap feeds/luci/themes/luci-theme-bootstrap
+
 # Mosdns
 git clone https://$github/sbwml/luci-app-mosdns -b v5 package/new/mosdns --depth=1
 
@@ -155,8 +159,6 @@ git clone https://$github/sbwml/luci-app-mentohust package/new/mentohust
 rm -rf feeds/packages/utils/coremark
 git clone https://$github/sbwml/openwrt_pkgs package/new/custom --depth=1
 rm -rf package/new/custom/ddns-scripts-aliyun
-rm -rf package/new/custom/luci-app-adguardhome
-
 # coremark - prebuilt with gcc15
 curl -s $mirror/openwrt/patch/coremark/coremark.aarch64-16-threads > package/new/custom/coremark/src/musl/coremark.aarch64
 
@@ -188,8 +190,3 @@ git clone https://$github/sbwml/package_libs_libpcap package/libs/libpcap
 
 # sqm-scripts
 curl -s $mirror/openwrt/patch/sqm-scripts/Makefile > feeds/packages/net/sqm-scripts/Makefile
-
-# luci-app-adguardhome
-rm -rf feeds/packages/net/adguardhome
-rm -rf feeds/luci/applications/luci-app-adguardhome
-git clone https://$github/zouchanggan/luci-app-adguardhome package/new/luci-app-adguardhome
